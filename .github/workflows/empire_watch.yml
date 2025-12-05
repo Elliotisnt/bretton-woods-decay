@@ -6,7 +6,7 @@
 # Required Secrets:
 #   - ICLOUD_EMAIL: Your iCloud email address (used to send)
 #   - ICLOUD_PASSWORD: An app-specific password (NOT your regular iCloud password)
-#                      Generate at: appleid.apple.com → Sign-In and Security → App-Specific Passwords
+#                      Generate at: appleid.apple.com -> Sign-In and Security -> App-Specific Passwords
 #   - TO_EMAIL: Email address to receive the reports (can be same as ICLOUD_EMAIL)
 
 name: Bretton Woods Decay Report
