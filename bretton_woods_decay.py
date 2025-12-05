@@ -43,58 +43,65 @@ THRESHOLDS = {
     "usd_reserve_share": {
         "warning": 55.0,
         "critical": 50.0,
+        "severe": 45.0,
         "direction": "below",
         "unit": "%",
         "description": "USD share of global FX reserves",
-        "context": "Peaked at 71% in 2000, currently around 56-58%"
+        "context": "Peaked at 71% (2000). Currently ~57%. Below 50% = serious dedollarization. Below 45% = unprecedented shift."
     },
     "china_treasury": {
         "warning": 700.0,
         "critical": 500.0,
+        "severe": 300.0,
         "direction": "below",
         "unit": "B",
         "description": "China holdings of US Treasuries",
-        "context": "Peaked at $1.3T in 2013, steady decline since"
+        "context": "Peaked at $1.3T (2013). Below $500B = aggressive divestment. Below $300B = near-complete exit."
     },
     "japan_treasury": {
         "warning": 1000.0,
         "critical": 850.0,
+        "severe": 700.0,
         "direction": "below",
         "unit": "B",
         "description": "Japan holdings of US Treasuries",
-        "context": "Largest foreign holder, typically $1.0-1.2T"
+        "context": "Largest foreign holder. Below $850B = unusual selling. Below $700B = currency crisis or policy shift."
     },
     "dxy": {
         "warning": 95.0,
         "critical": 85.0,
+        "severe": 75.0,
         "direction": "below",
         "unit": "",
         "description": "Dollar Index (DXY)",
-        "context": "Measures USD vs basket of 6 major currencies (EUR 57.6%, JPY 13.6%, GBP 11.9%, CAD 9.1%, SEK 4.2%, CHF 3.6%)"
+        "context": "Measures USD vs 6 currencies (EUR 57.6%, JPY 13.6%, GBP 11.9%, CAD 9.1%, SEK 4.2%, CHF 3.6%). Below 75 = multi-decade low."
     },
     "debt_to_gdp": {
         "warning": 130.0,
         "critical": 150.0,
+        "severe": 180.0,
         "direction": "above",
         "unit": "%",
         "description": "US Federal Debt to GDP ratio",
-        "context": "Was 55% in 2000, 100% in 2012, now ~120%"
+        "context": "Was 55% (2000), 100% (2012), now ~120%. Above 150% = Japan-level debt. Above 180% = uncharted territory."
     },
     "interest_to_revenue": {
         "warning": 25.0,
         "critical": 33.0,
+        "severe": 50.0,
         "direction": "above",
         "unit": "%",
         "description": "Federal interest payments as % of revenue",
-        "context": "Above 33% means 1/3 of all tax revenue goes to interest"
+        "context": "At 33% = 1/3 of tax revenue to interest. At 50% = half of revenue to interest (debt spiral territory)."
     },
     "intl_vs_us_3yr": {
         "warning": 15.0,
         "critical": 30.0,
+        "severe": 50.0,
         "direction": "above",
         "unit": "%",
         "description": "International vs US stocks (3-year cumulative)",
-        "context": "Positive = international outperforming US"
+        "context": "Positive = international outperforming. Above 30% = major regime change. Above 50% = potential secular shift."
     }
 }
 
@@ -222,10 +229,12 @@ def fetch_imf_cofer_direct():
 def fetch_treasury_holdings():
     """
     Fetch China and Japan Treasury holdings from Treasury TIC data.
+    Uses the newer slt_table5.txt file which is actively updated monthly.
     Data is released monthly with ~6 week lag.
     """
     try:
-        url = "https://ticdata.treasury.gov/Publish/mfh.txt"
+        # Use the newer SLT table 5 file (updated monthly)
+        url = "https://ticdata.treasury.gov/resource-center/data-chart-center/tic/Documents/slt_table5.txt"
         response = requests.get(url, headers=HEADERS, timeout=30)
         
         if response.status_code == 200:
@@ -234,75 +243,85 @@ def fetch_treasury_holdings():
             china_data = None
             japan_data = None
             data_date = None
-            column_headers = []
+            date_columns = []
             
             for line in lines:
-                # Skip empty lines and separators
-                if not line.strip() or '------' in line:
+                # Skip empty lines and notes
+                if not line.strip():
                     continue
-                if line.startswith('MAJOR') or line.startswith('HOLDINGS'):
+                if line.startswith('Table 5:') or line.startswith('Holdings at') or line.startswith('Billions') or line.startswith('Link:'):
                     continue
+                if line.startswith('Notes:') or line.startswith('The data in') or line.startswith('overseas') or line.startswith('(see TIC'):
+                    continue
+                if line.startswith('Estimated') or line.startswith('International') or line.startswith('as reported') or line.startswith('and on TIC'):
+                    continue
+                
+                # Tab-separated data
+                parts = line.split('\t')
+                
+                # Header row with dates (Country, 2025-09, 2025-08, ...)
+                if parts[0].strip() == 'Country':
+                    date_columns = [p.strip() for p in parts[1:] if p.strip()]
+                    if date_columns:
+                        data_date = date_columns[0]  # Most recent date
+                    continue
+                
+                # Parse country rows
+                country = parts[0].strip().lower()
+                
+                if country == 'japan':
+                    values = []
+                    for p in parts[1:]:
+                        p = p.strip()
+                        if p:
+                            try:
+                                values.append(float(p.replace(',', '')))
+                            except ValueError:
+                                values.append(None)
                     
-                # Extract column headers (dates)
-                if line.strip().startswith('Country'):
-                    # Parse the header line to get dates
-                    parts = line.split()
-                    # Format is like: Country    Oct    Sep    Aug ... (months)
-                    # Then next line has years
-                    column_headers = parts[1:]  # Skip "Country"
-                    continue
-                
-                # Check for year line (starts with whitespace and has years)
-                if line.startswith(' ') and re.match(r'^\s+\d{4}', line):
-                    years = line.split()
-                    if column_headers and years:
-                        # Combine month + year for first column to get data date
-                        data_date = f"{column_headers[0]} {years[0]}"
-                    continue
-                
-                # Parse country data
-                line_lower = line.lower()
-                
-                if line_lower.strip().startswith('japan'):
-                    values = re.findall(r'[\d,]+\.?\d*', line)
-                    # Remove commas and convert
-                    values = [float(v.replace(',', '')) for v in values if v]
-                    if values:
+                    if values and values[0] is not None:
                         japan_data = {
                             "current": values[0],
-                            "6mo_ago": values[6] if len(values) > 6 else None,
-                            "12mo_ago": values[12] if len(values) > 12 else None
+                            "6mo_ago": values[6] if len(values) > 6 and values[6] is not None else None,
+                            "12mo_ago": values[12] if len(values) > 12 and values[12] is not None else None
                         }
                 
-                if 'china' in line_lower and 'mainland' in line_lower:
-                    values = re.findall(r'[\d,]+\.?\d*', line)
-                    values = [float(v.replace(',', '')) for v in values if v]
-                    if values:
+                if country == 'china, mainland':
+                    values = []
+                    for p in parts[1:]:
+                        p = p.strip()
+                        if p:
+                            try:
+                                values.append(float(p.replace(',', '')))
+                            except ValueError:
+                                values.append(None)
+                    
+                    if values and values[0] is not None:
                         china_data = {
                             "current": values[0],
-                            "6mo_ago": values[6] if len(values) > 6 else None,
-                            "12mo_ago": values[12] if len(values) > 12 else None
+                            "6mo_ago": values[6] if len(values) > 6 and values[6] is not None else None,
+                            "12mo_ago": values[12] if len(values) > 12 and values[12] is not None else None
                         }
             
             result = {
                 "success": True, 
                 "data_date": data_date,
                 "data_freshness": data_date if data_date else "Unknown",
-                "source": "Treasury TIC (ticdata.treasury.gov)"
+                "source": "Treasury TIC SLT Table 5"
             }
             
             if china_data:
                 china_data["change_6mo"] = round(china_data["current"] - china_data["6mo_ago"], 1) if china_data["6mo_ago"] else None
                 china_data["change_12mo"] = round(china_data["current"] - china_data["12mo_ago"], 1) if china_data["12mo_ago"] else None
                 china_data["data_freshness"] = data_date
-                china_data["source"] = "Treasury TIC"
+                china_data["source"] = "Treasury TIC SLT Table 5"
                 result["china"] = china_data
             
             if japan_data:
                 japan_data["change_6mo"] = round(japan_data["current"] - japan_data["6mo_ago"], 1) if japan_data["6mo_ago"] else None
                 japan_data["change_12mo"] = round(japan_data["current"] - japan_data["12mo_ago"], 1) if japan_data["12mo_ago"] else None
                 japan_data["data_freshness"] = data_date
-                japan_data["source"] = "Treasury TIC"
+                japan_data["source"] = "Treasury TIC SLT Table 5"
                 result["japan"] = japan_data
             
             return result
@@ -741,7 +760,8 @@ def generate_html_report(data):
         <div class="data-freshness">Data as of: {freshness} | Source: {source}</div>
         <div class="threshold-note">
             Warning: below {THRESHOLDS['usd_reserve_share']['warning']}% | 
-            Critical: below {THRESHOLDS['usd_reserve_share']['critical']}%<br>
+            Critical: below {THRESHOLDS['usd_reserve_share']['critical']}% |
+            Severe: below {THRESHOLDS['usd_reserve_share']['severe']}%<br>
             {THRESHOLDS['usd_reserve_share']['context']}
         </div>
     </div>
@@ -786,7 +806,8 @@ def generate_html_report(data):
         <div class="data-freshness">Data as of: {freshness} | Source: {source}</div>
         <div class="threshold-note">
             Warning: below ${THRESHOLDS['china_treasury']['warning']}B | 
-            Critical: below ${THRESHOLDS['china_treasury']['critical']}B<br>
+            Critical: below ${THRESHOLDS['china_treasury']['critical']}B |
+            Severe: below ${THRESHOLDS['china_treasury']['severe']}B<br>
             {THRESHOLDS['china_treasury']['context']}
         </div>
     </div>
@@ -831,7 +852,8 @@ def generate_html_report(data):
         <div class="data-freshness">Data as of: {freshness} | Source: {source}</div>
         <div class="threshold-note">
             Warning: below ${THRESHOLDS['japan_treasury']['warning']}B | 
-            Critical: below ${THRESHOLDS['japan_treasury']['critical']}B<br>
+            Critical: below ${THRESHOLDS['japan_treasury']['critical']}B |
+            Severe: below ${THRESHOLDS['japan_treasury']['severe']}B<br>
             {THRESHOLDS['japan_treasury']['context']}
         </div>
     </div>
@@ -915,7 +937,8 @@ def generate_html_report(data):
         <div class="data-freshness">Data as of: {freshness} | Source: {source}</div>
         <div class="threshold-note">
             Warning: above {THRESHOLDS['debt_to_gdp']['warning']}% | 
-            Critical: above {THRESHOLDS['debt_to_gdp']['critical']}%<br>
+            Critical: above {THRESHOLDS['debt_to_gdp']['critical']}% |
+            Severe: above {THRESHOLDS['debt_to_gdp']['severe']}%<br>
             {THRESHOLDS['debt_to_gdp']['context']}
         </div>
     </div>
@@ -960,7 +983,8 @@ def generate_html_report(data):
         <div class="data-freshness">Data as of: {freshness} | Source: {source}</div>
         <div class="threshold-note">
             Warning: above {THRESHOLDS['interest_to_revenue']['warning']}% | 
-            Critical: above {THRESHOLDS['interest_to_revenue']['critical']}%<br>
+            Critical: above {THRESHOLDS['interest_to_revenue']['critical']}% |
+            Severe: above {THRESHOLDS['interest_to_revenue']['severe']}%<br>
             {THRESHOLDS['interest_to_revenue']['context']}
         </div>
     </div>
