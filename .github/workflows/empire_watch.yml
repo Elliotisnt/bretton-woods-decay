@@ -41,7 +41,7 @@ jobs:
           ICLOUD_EMAIL: ${{ secrets.ICLOUD_EMAIL }}
           ICLOUD_PASSWORD: ${{ secrets.ICLOUD_PASSWORD }}
           TO_EMAIL: ${{ secrets.TO_EMAIL }}
-        run: python empire_watch.py
+        run: python bretton_woods_decay.py
 
       # Save the HTML report as an artifact (useful for debugging)
       - name: Upload report artifact
@@ -49,5 +49,5 @@ jobs:
         if: always()
         with:
           name: bretton-woods-report-${{ github.run_number }}
-          path: empire_report.html
+          path: bretton_woods_report.html
           retention-days: 90
