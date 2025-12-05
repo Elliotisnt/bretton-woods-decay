@@ -22,31 +22,25 @@ How much US government debt Japan holds.
 - **Critical:** Below $850B
 - **Context:** Largest holder, typically $1.0-1.2T
 
-### 4. US Share of Global Equity Market Cap
-What percentage of world stock market value is US companies.
-- **Warning:** Below 40%
-- **Critical:** Below 35%
-- **Context:** Currently around 44%, was ~40% in 2010
-
-### 5. Dollar Index (DXY)
+### 4. Dollar Index (DXY)
 USD strength vs a basket of major currencies.
 - **Warning:** Below 95
 - **Critical:** Below 85
 - **Context:** 100 is roughly neutral. Sustained weakness signals confidence loss.
 
-### 6. US Debt-to-GDP Ratio
+### 5. US Debt-to-GDP Ratio
 Federal debt as a percentage of economic output.
 - **Warning:** Above 130%
 - **Critical:** Above 150%
-- **Context:** Was 60% in 2000, 100% in 2012, now ~123%
+- **Context:** Was 60% in 2000, 100% in 2012, now around 120%
 
-### 7. Interest Payments as % of Revenue
+### 6. Interest Payments as % of Revenue
 How much of federal revenue goes to servicing debt.
 - **Warning:** Above 25%
 - **Critical:** Above 33%
 - **Context:** Above 33% means 1/3 of all revenue goes to interest
 
-### 8. International vs US Stocks (3-Year)
+### 7. International vs US Stocks (3-Year)
 Cumulative performance difference between international and US stocks.
 - **Warning:** International ahead by 15%+
 - **Critical:** International ahead by 30%+
@@ -65,7 +59,7 @@ Upload these files to your repo:
 bretton-woods-decay/
 ├── .github/
 │   └── workflows/
-│       └── empire_watch.yml
+│       └── bretton_woods_decay.yml
 ├── bretton_woods_decay.py
 └── README.md
 ```
@@ -73,13 +67,13 @@ bretton-woods-decay/
 ### 3. Generate an iCloud App-Specific Password
 
 1. Go to [appleid.apple.com](https://appleid.apple.com)
-2. Sign in → Sign-In and Security → App-Specific Passwords
+2. Sign in -> Sign-In and Security -> App-Specific Passwords
 3. Generate a password, name it "BrettonWoodsDecay"
 4. Copy the code (format: `xxxx-xxxx-xxxx-xxxx`)
 
 ### 4. Configure GitHub Secrets
 
-In your repo: Settings → Secrets and variables → Actions → New repository secret
+In your repo: Settings -> Secrets and variables -> Actions -> New repository secret
 
 | Secret Name | Value |
 |-------------|-------|
@@ -89,7 +83,7 @@ In your repo: Settings → Secrets and variables → Actions → New repository 
 
 ### 5. Test It
 
-Actions → Bretton Woods Decay Report → Run workflow
+Actions -> Bretton Woods Decay Report -> Run workflow
 
 This will send you an email immediately.
 
