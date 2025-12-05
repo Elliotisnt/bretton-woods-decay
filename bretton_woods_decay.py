@@ -3,13 +3,13 @@ Bretton Woods Decay - Semi-Annual Macro Indicator Monitor
 =========================================================
 Tracks key indicators of US dollar/empire structural health:
 
-1. USD share of global foreign exchange reserves (IMF COFER)
+1. USD share of global foreign exchange reserves (IMF COFER via DBnomics)
 2. China holdings of US Treasuries (Treasury TIC)
 3. Japan holdings of US Treasuries (Treasury TIC)
-4. DXY Dollar Index
+4. DXY Dollar Index (Yahoo Finance)
 5. US Debt-to-GDP ratio (FRED)
 6. Federal interest payments as % of revenue (FRED)
-7. International vs US stock performance (FTIHX vs FXAIX proxy)
+7. International vs US stock performance (VXUS vs VTI)
 
 Designed to run twice yearly (January and July) via GitHub Actions.
 Sends a formatted email report via iCloud SMTP.
@@ -32,7 +32,7 @@ ICLOUD_PASSWORD = os.environ.get("ICLOUD_PASSWORD")
 TO_EMAIL = os.environ.get("TO_EMAIL", ICLOUD_EMAIL)
 
 HEADERS = {
-    "User-Agent": "BrettonWoodsDecay/1.0 (github.com/bretton-woods-decay)",
+    "User-Agent": "BrettonWoodsDecay/2.0 (github.com/bretton-woods-decay)",
     "Accept": "application/json"
 }
 
@@ -46,7 +46,7 @@ THRESHOLDS = {
         "direction": "below",
         "unit": "%",
         "description": "USD share of global FX reserves",
-        "context": "Peaked at 71% in 2000, currently around 58%"
+        "context": "Peaked at 71% in 2000, currently around 56-58%"
     },
     "china_treasury": {
         "warning": 700.0,
@@ -54,7 +54,7 @@ THRESHOLDS = {
         "direction": "below",
         "unit": "B",
         "description": "China holdings of US Treasuries",
-        "context": "Peaked at $1.3T in 2013, now around $775B"
+        "context": "Peaked at $1.3T in 2013, steady decline since"
     },
     "japan_treasury": {
         "warning": 1000.0,
@@ -62,7 +62,7 @@ THRESHOLDS = {
         "direction": "below",
         "unit": "B",
         "description": "Japan holdings of US Treasuries",
-        "context": "Largest holder, typically $1.0-1.2T"
+        "context": "Largest foreign holder, typically $1.0-1.2T"
     },
     "dxy": {
         "warning": 95.0,
@@ -70,7 +70,7 @@ THRESHOLDS = {
         "direction": "below",
         "unit": "",
         "description": "Dollar Index (DXY)",
-        "context": "Measures USD vs basket of currencies. 100 is neutral-ish."
+        "context": "Measures USD vs basket of 6 major currencies (EUR 57.6%, JPY 13.6%, GBP 11.9%, CAD 9.1%, SEK 4.2%, CHF 3.6%)"
     },
     "debt_to_gdp": {
         "warning": 130.0,
@@ -78,7 +78,7 @@ THRESHOLDS = {
         "direction": "above",
         "unit": "%",
         "description": "US Federal Debt to GDP ratio",
-        "context": "Was 60% in 2000, 100% in 2012, now around 120%"
+        "context": "Was 55% in 2000, 100% in 2012, now ~120%"
     },
     "interest_to_revenue": {
         "warning": 25.0,
@@ -86,7 +86,7 @@ THRESHOLDS = {
         "direction": "above",
         "unit": "%",
         "description": "Federal interest payments as % of revenue",
-        "context": "Above 33% means 1/3 of all revenue goes to interest"
+        "context": "Above 33% means 1/3 of all tax revenue goes to interest"
     },
     "intl_vs_us_3yr": {
         "warning": 15.0,
@@ -104,61 +104,126 @@ THRESHOLDS = {
 # =============================================================================
 
 def fetch_imf_cofer():
-    """Fetch USD share of global reserves from IMF."""
+    """
+    Fetch USD share of global reserves from DBnomics (mirrors IMF COFER).
+    Uses quarterly data: Q.W00.RAXGFXARUSDRT_PT
+    """
     try:
-        # IMF SDMX API - USD share of allocated reserves
-        # Try multiple URL formats as IMF has changed their API
-        urls_to_try = [
-            "https://dataservices.imf.org/REST/SDMX_JSON.svc/CompactData/COFER/Q.W00.RAXGFXARUSDRT_PT",
-            "http://dataservices.imf.org/REST/SDMX_JSON.svc/CompactData/COFER/Q.W00.RAXGFXARUSDRT_PT",
-        ]
+        # DBnomics API for IMF COFER - USD share of allocated reserves (quarterly)
+        url = "https://api.db.nomics.world/v22/series/IMF/COFER/Q.W00.RAXGFXARUSDRT_PT?observations=1"
+        response = requests.get(url, headers=HEADERS, timeout=30)
         
-        for url in urls_to_try:
-            try:
-                response = requests.get(url, headers=HEADERS, timeout=30)
+        if response.status_code == 200:
+            data = response.json()
+            series = data.get("series", {})
+            docs = series.get("docs", [])
+            
+            if docs:
+                doc = docs[0]
+                periods = doc.get("period", [])
+                values = doc.get("value", [])
+                indexed_at = doc.get("indexed_at", "")
                 
-                if response.status_code == 200:
-                    data = response.json()
-                    series = data.get("CompactData", {}).get("DataSet", {}).get("Series", {})
-                    observations = series.get("Obs", [])
+                # DBnomics indexed_at is when they last updated from IMF
+                data_freshness = "Unknown"
+                if indexed_at:
+                    try:
+                        # Parse ISO format
+                        if "T" in indexed_at:
+                            dt = datetime.fromisoformat(indexed_at.replace("Z", "+00:00"))
+                            data_freshness = dt.strftime("%Y-%m-%d")
+                    except:
+                        data_freshness = indexed_at[:10] if len(indexed_at) >= 10 else indexed_at
+                
+                if periods and values:
+                    # Get latest non-null value
+                    latest_idx = len(values) - 1
+                    while latest_idx >= 0 and values[latest_idx] is None:
+                        latest_idx -= 1
                     
-                    if isinstance(observations, dict):
-                        observations = [observations]
-                    
-                    if observations:
-                        latest = observations[-1]
-                        current = float(latest.get("@OBS_VALUE", 0))
-                        period = latest.get("@TIME_PERIOD", "Unknown")
+                    if latest_idx >= 0:
+                        current = float(values[latest_idx])
+                        period = periods[latest_idx]
                         
                         # Get 1-year ago (4 quarters back)
                         year_ago = None
-                        if len(observations) >= 5:
-                            year_ago = float(observations[-5].get("@OBS_VALUE", 0))
+                        year_ago_period = None
+                        if latest_idx >= 4:
+                            year_ago = float(values[latest_idx - 4]) if values[latest_idx - 4] is not None else None
+                            year_ago_period = periods[latest_idx - 4]
                         
                         # Get 5-years ago (20 quarters back)
                         five_year_ago = None
-                        if len(observations) >= 21:
-                            five_year_ago = float(observations[-21].get("@OBS_VALUE", 0))
+                        five_year_period = None
+                        if latest_idx >= 20:
+                            five_year_ago = float(values[latest_idx - 20]) if values[latest_idx - 20] is not None else None
+                            five_year_period = periods[latest_idx - 20]
                         
                         return {
                             "success": True,
                             "value": round(current, 1),
                             "period": period,
                             "year_ago": round(year_ago, 1) if year_ago else None,
+                            "year_ago_period": year_ago_period,
                             "five_year_ago": round(five_year_ago, 1) if five_year_ago else None,
+                            "five_year_period": five_year_period,
                             "change_1y": round(current - year_ago, 2) if year_ago else None,
-                            "change_5y": round(current - five_year_ago, 2) if five_year_ago else None
+                            "change_5y": round(current - five_year_ago, 2) if five_year_ago else None,
+                            "data_freshness": data_freshness,
+                            "source": "IMF COFER via DBnomics"
                         }
-            except Exception:
-                continue
         
-        return {"success": False, "error": "IMF API unavailable"}
+        # Try fallback: direct IMF API
+        return fetch_imf_cofer_direct()
+        
     except Exception as e:
-        return {"success": False, "error": str(e)}
+        return fetch_imf_cofer_direct()
+
+
+def fetch_imf_cofer_direct():
+    """Fallback: try direct IMF API."""
+    try:
+        url = "https://dataservices.imf.org/REST/SDMX_JSON.svc/CompactData/COFER/Q.W00.RAXGFXARUSDRT_PT"
+        response = requests.get(url, headers=HEADERS, timeout=30)
+        
+        if response.status_code == 200:
+            data = response.json()
+            series = data.get("CompactData", {}).get("DataSet", {}).get("Series", {})
+            observations = series.get("Obs", [])
+            
+            if isinstance(observations, dict):
+                observations = [observations]
+            
+            if observations:
+                latest = observations[-1]
+                current = float(latest.get("@OBS_VALUE", 0))
+                period = latest.get("@TIME_PERIOD", "Unknown")
+                
+                year_ago = float(observations[-5].get("@OBS_VALUE", 0)) if len(observations) >= 5 else None
+                five_year_ago = float(observations[-21].get("@OBS_VALUE", 0)) if len(observations) >= 21 else None
+                
+                return {
+                    "success": True,
+                    "value": round(current, 1),
+                    "period": period,
+                    "year_ago": round(year_ago, 1) if year_ago else None,
+                    "five_year_ago": round(five_year_ago, 1) if five_year_ago else None,
+                    "change_1y": round(current - year_ago, 2) if year_ago else None,
+                    "change_5y": round(current - five_year_ago, 2) if five_year_ago else None,
+                    "data_freshness": "Live from IMF",
+                    "source": "IMF COFER direct API"
+                }
+        
+        return {"success": False, "error": "IMF API unavailable", "source": "IMF COFER"}
+    except Exception as e:
+        return {"success": False, "error": str(e), "source": "IMF COFER"}
 
 
 def fetch_treasury_holdings():
-    """Fetch China and Japan Treasury holdings from TIC data."""
+    """
+    Fetch China and Japan Treasury holdings from Treasury TIC data.
+    Data is released monthly with ~6 week lag.
+    """
     try:
         url = "https://ticdata.treasury.gov/Publish/mfh.txt"
         response = requests.get(url, headers=HEADERS, timeout=30)
@@ -169,74 +234,86 @@ def fetch_treasury_holdings():
             china_data = None
             japan_data = None
             data_date = None
+            column_headers = []
             
             for line in lines:
-                # Skip headers and separators
+                # Skip empty lines and separators
                 if not line.strip() or '------' in line:
                     continue
                 if line.startswith('MAJOR') or line.startswith('HOLDINGS'):
                     continue
                     
-                # Look for the header line with dates
+                # Extract column headers (dates)
                 if line.strip().startswith('Country'):
-                    # Extract the first date column (most recent)
+                    # Parse the header line to get dates
                     parts = line.split()
-                    # Find something that looks like a month abbreviation
-                    for i, part in enumerate(parts):
-                        if part in ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 
-                                   'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']:
-                            # Next part should be year
-                            if i + 1 < len(parts):
-                                data_date = f"{part} {parts[i+1]}"
-                            else:
-                                data_date = part
-                            break
+                    # Format is like: Country    Oct    Sep    Aug ... (months)
+                    # Then next line has years
+                    column_headers = parts[1:]  # Skip "Country"
+                    continue
+                
+                # Check for year line (starts with whitespace and has years)
+                if line.startswith(' ') and re.match(r'^\s+\d{4}', line):
+                    years = line.split()
+                    if column_headers and years:
+                        # Combine month + year for first column to get data date
+                        data_date = f"{column_headers[0]} {years[0]}"
                     continue
                 
                 # Parse country data
-                line_lower = line.lower().strip()
+                line_lower = line.lower()
                 
-                # Match Japan (must start with Japan)
-                if line_lower.startswith('japan'):
-                    values = re.findall(r'[\d.]+', line)
+                if line_lower.strip().startswith('japan'):
+                    values = re.findall(r'[\d,]+\.?\d*', line)
+                    # Remove commas and convert
+                    values = [float(v.replace(',', '')) for v in values if v]
                     if values:
                         japan_data = {
-                            "current": float(values[0]),
-                            "6mo_ago": float(values[6]) if len(values) > 6 else None,
-                            "12mo_ago": float(values[12]) if len(values) > 12 else None
+                            "current": values[0],
+                            "6mo_ago": values[6] if len(values) > 6 else None,
+                            "12mo_ago": values[12] if len(values) > 12 else None
                         }
                 
-                # Match China, Mainland
                 if 'china' in line_lower and 'mainland' in line_lower:
-                    values = re.findall(r'[\d.]+', line)
+                    values = re.findall(r'[\d,]+\.?\d*', line)
+                    values = [float(v.replace(',', '')) for v in values if v]
                     if values:
                         china_data = {
-                            "current": float(values[0]),
-                            "6mo_ago": float(values[6]) if len(values) > 6 else None,
-                            "12mo_ago": float(values[12]) if len(values) > 12 else None
+                            "current": values[0],
+                            "6mo_ago": values[6] if len(values) > 6 else None,
+                            "12mo_ago": values[12] if len(values) > 12 else None
                         }
             
-            result = {"success": True, "data_date": data_date}
+            result = {
+                "success": True, 
+                "data_date": data_date,
+                "data_freshness": data_date if data_date else "Unknown",
+                "source": "Treasury TIC (ticdata.treasury.gov)"
+            }
             
             if china_data:
                 china_data["change_6mo"] = round(china_data["current"] - china_data["6mo_ago"], 1) if china_data["6mo_ago"] else None
                 china_data["change_12mo"] = round(china_data["current"] - china_data["12mo_ago"], 1) if china_data["12mo_ago"] else None
+                china_data["data_freshness"] = data_date
+                china_data["source"] = "Treasury TIC"
                 result["china"] = china_data
             
             if japan_data:
                 japan_data["change_6mo"] = round(japan_data["current"] - japan_data["6mo_ago"], 1) if japan_data["6mo_ago"] else None
                 japan_data["change_12mo"] = round(japan_data["current"] - japan_data["12mo_ago"], 1) if japan_data["12mo_ago"] else None
+                japan_data["data_freshness"] = data_date
+                japan_data["source"] = "Treasury TIC"
                 result["japan"] = japan_data
             
             return result
         
-        return {"success": False, "error": f"API returned status {response.status_code}"}
+        return {"success": False, "error": f"API returned status {response.status_code}", "source": "Treasury TIC"}
     except Exception as e:
-        return {"success": False, "error": str(e)}
+        return {"success": False, "error": str(e), "source": "Treasury TIC"}
 
 
 def fetch_fred_series(series_id, name):
-    """Fetch a data series from FRED (no API key needed for basic access)."""
+    """Fetch a data series from FRED (no API key needed for basic CSV access)."""
     try:
         url = f"https://fred.stlouisfed.org/graph/fredgraph.csv?id={series_id}"
         response = requests.get(url, headers=HEADERS, timeout=30)
@@ -252,30 +329,34 @@ def fetch_fred_series(series_id, name):
                         value = float(parts[1])
                         return {
                             "success": True,
-                            "value": round(value, 1),  # Round to 1 decimal
+                            "value": value,
                             "date": date,
+                            "data_freshness": date,
+                            "source": f"FRED ({series_id})",
                             "name": name
                         }
         
-        return {"success": False, "error": f"Could not fetch {name}", "name": name}
+        return {"success": False, "error": f"Could not fetch {name}", "source": f"FRED ({series_id})", "name": name}
     except Exception as e:
-        return {"success": False, "error": str(e), "name": name}
+        return {"success": False, "error": str(e), "source": f"FRED ({series_id})", "name": name}
 
 
 def fetch_debt_to_gdp():
     """Fetch US Federal Debt to GDP ratio from FRED."""
-    # GFDEGDQ188S = Federal Debt: Total Public Debt as Percent of GDP
-    return fetch_fred_series("GFDEGDQ188S", "Debt-to-GDP")
+    result = fetch_fred_series("GFDEGDQ188S", "Debt-to-GDP")
+    if result.get("success"):
+        result["value"] = round(result["value"], 1)
+    return result
 
 
 def fetch_interest_to_revenue():
     """
     Calculate interest payments as % of revenue.
-    This requires two series and a calculation.
+    Uses two FRED series and calculates the ratio.
     """
     try:
-        # A091RC1Q027SBEA = Federal government interest payments
-        # W006RC1Q027SBEA = Federal government current receipts (revenue)
+        # A091RC1Q027SBEA = Federal government interest payments (quarterly, billions)
+        # W006RC1Q027SBEA = Federal government current receipts (quarterly, billions)
         
         interest_url = "https://fred.stlouisfed.org/graph/fredgraph.csv?id=A091RC1Q027SBEA"
         revenue_url = "https://fred.stlouisfed.org/graph/fredgraph.csv?id=W006RC1Q027SBEA"
@@ -302,16 +383,21 @@ def fetch_interest_to_revenue():
                     "value": round(ratio, 1),
                     "interest": round(interest, 1),
                     "revenue": round(revenue, 1),
-                    "date": i_date
+                    "date": i_date,
+                    "data_freshness": i_date,
+                    "source": "FRED (A091RC1Q027SBEA / W006RC1Q027SBEA)"
                 }
         
-        return {"success": False, "error": "Could not calculate interest/revenue ratio"}
+        return {"success": False, "error": "Could not calculate interest/revenue ratio", "source": "FRED"}
     except Exception as e:
-        return {"success": False, "error": str(e)}
+        return {"success": False, "error": str(e), "source": "FRED"}
 
 
 def fetch_dxy():
-    """Fetch DXY Dollar Index from Yahoo Finance."""
+    """
+    Fetch DXY Dollar Index from Yahoo Finance.
+    DXY measures USD against a basket of 6 currencies.
+    """
     try:
         url = "https://query1.finance.yahoo.com/v8/finance/chart/DX-Y.NYB?interval=1d&range=5y"
         headers = {**HEADERS, "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
@@ -324,7 +410,7 @@ def fetch_dxy():
             closes = result.get("indicators", {}).get("quote", [{}])[0].get("close", [])
             timestamps = result.get("timestamp", [])
             
-            # Filter out None values and get latest
+            # Filter out None values
             valid_data = [(t, c) for t, c in zip(timestamps, closes) if c is not None]
             
             if valid_data:
@@ -332,34 +418,39 @@ def fetch_dxy():
                 latest_date = datetime.fromtimestamp(latest_ts).strftime("%Y-%m-%d")
                 
                 # Get 1 year ago (roughly 252 trading days)
-                year_ago = None
-                if len(valid_data) > 252:
-                    year_ago = valid_data[-252][1]
+                year_ago = valid_data[-252][1] if len(valid_data) > 252 else None
+                year_ago_date = datetime.fromtimestamp(valid_data[-252][0]).strftime("%Y-%m-%d") if len(valid_data) > 252 else None
                 
                 # Get 3 years ago
-                three_year_ago = None
-                if len(valid_data) > 756:
-                    three_year_ago = valid_data[-756][1]
+                three_year_ago = valid_data[-756][1] if len(valid_data) > 756 else None
+                three_year_date = datetime.fromtimestamp(valid_data[-756][0]).strftime("%Y-%m-%d") if len(valid_data) > 756 else None
                 
                 return {
                     "success": True,
-                    "value": round(current, 1),
+                    "value": round(current, 2),
                     "date": latest_date,
-                    "year_ago": round(year_ago, 1) if year_ago else None,
-                    "three_year_ago": round(three_year_ago, 1) if three_year_ago else None,
-                    "change_1y": round(current - year_ago, 1) if year_ago else None,
-                    "change_3y": round(current - three_year_ago, 1) if three_year_ago else None
+                    "data_freshness": f"Live (as of {latest_date})",
+                    "year_ago": round(year_ago, 2) if year_ago else None,
+                    "year_ago_date": year_ago_date,
+                    "three_year_ago": round(three_year_ago, 2) if three_year_ago else None,
+                    "three_year_date": three_year_date,
+                    "change_1y": round(current - year_ago, 2) if year_ago else None,
+                    "change_3y": round(current - three_year_ago, 2) if three_year_ago else None,
+                    "source": "Yahoo Finance (DX-Y.NYB)"
                 }
         
-        return {"success": False, "error": f"Could not fetch DXY (status {response.status_code})"}
+        return {"success": False, "error": f"Could not fetch DXY (status {response.status_code})", "source": "Yahoo Finance"}
     except Exception as e:
-        return {"success": False, "error": str(e)}
+        return {"success": False, "error": str(e), "source": "Yahoo Finance"}
 
 
 def fetch_intl_vs_us_performance():
     """
     Compare international vs US stock performance.
-    Uses VXUS (international) vs VTI (US) as proxies for FTIHX vs FXAIX.
+    VXUS = Vanguard Total International Stock ETF (ex-US) - proxy for FTIHX
+    VTI = Vanguard Total Stock Market ETF (US) - proxy for FXAIX
+    
+    VXUS explicitly excludes US stocks, so this gives a clean comparison.
     """
     try:
         def get_prices(symbol):
@@ -383,6 +474,7 @@ def fetch_intl_vs_us_performance():
         if vxus_data and vti_data:
             vxus_current = vxus_data[-1][1]
             vti_current = vti_data[-1][1]
+            latest_date = datetime.fromtimestamp(vxus_data[-1][0]).strftime("%Y-%m-%d")
             
             # 1 year ago
             vxus_1y = vxus_data[-252][1] if len(vxus_data) > 252 else None
@@ -394,11 +486,12 @@ def fetch_intl_vs_us_performance():
             
             result = {
                 "success": True,
-                "date": datetime.fromtimestamp(vxus_data[-1][0]).strftime("%Y-%m-%d")
+                "date": latest_date,
+                "data_freshness": f"Live (as of {latest_date})",
+                "source": "Yahoo Finance (VXUS vs VTI)"
             }
             
-            # Calculate relative performance (international vs US)
-            # Positive = international outperforming
+            # Calculate returns (positive = international outperforming)
             if vxus_1y and vti_1y:
                 vxus_return_1y = ((vxus_current / vxus_1y) - 1) * 100
                 vti_return_1y = ((vti_current / vti_1y) - 1) * 100
@@ -416,9 +509,9 @@ def fetch_intl_vs_us_performance():
             
             return result
         
-        return {"success": False, "error": "Could not fetch ETF data"}
+        return {"success": False, "error": "Could not fetch ETF data", "source": "Yahoo Finance"}
     except Exception as e:
-        return {"success": False, "error": str(e)}
+        return {"success": False, "error": str(e), "source": "Yahoo Finance"}
 
 
 # =============================================================================
@@ -456,6 +549,13 @@ def format_change(value, unit=""):
     return f"{sign}{value}{unit}"
 
 
+def format_value(value, unit="", default="N/A"):
+    """Format a value with unit."""
+    if value is None:
+        return default
+    return f"{value}{unit}"
+
+
 # =============================================================================
 # REPORT GENERATION
 # =============================================================================
@@ -465,27 +565,27 @@ def generate_html_report(data):
     
     today = datetime.now().strftime('%B %d, %Y')
     
-    # Collect all statuses (only from indicators that succeeded)
+    # Collect all statuses (only from successful fetches)
     statuses = []
     for key in data:
-        if isinstance(data[key], dict):
-            status = data[key].get("status")
-            # Only count statuses from successful fetches
-            if status and status != "unknown":
-                statuses.append(status)
+        if isinstance(data[key], dict) and "status" in data[key]:
+            if data[key].get("success", False) or data[key].get("status") != "unknown":
+                statuses.append(data[key]["status"])
     
-    if "critical" in statuses:
+    # Determine overall status
+    known_statuses = [s for s in statuses if s != "unknown"]
+    if "critical" in known_statuses:
         overall = "CRITICAL - Review your allocation"
         overall_color = "#dc3545"
-    elif "warning" in statuses:
+    elif "warning" in known_statuses:
         overall = "WARNING - Monitor closely"
         overall_color = "#e67e22"
-    elif not statuses:
-        overall = "DATA UNAVAILABLE - Check API connections"
-        overall_color = "#95a5a6"
-    else:
+    elif known_statuses:
         overall = "STABLE - No immediate concerns"
         overall_color = "#27ae60"
+    else:
+        overall = "UNKNOWN - Data unavailable"
+        overall_color = "#95a5a6"
     
     html = f"""
 <!DOCTYPE html>
@@ -542,6 +642,12 @@ def generate_html_report(data):
             font-size: 14px;
             color: #555;
         }}
+        .data-freshness {{
+            font-size: 11px;
+            color: #888;
+            margin-top: 8px;
+            font-style: italic;
+        }}
         .threshold-note {{
             font-size: 12px;
             color: #777;
@@ -580,6 +686,11 @@ def generate_html_report(data):
             font-size: 12px; 
             color: #666; 
         }}
+        .error-note {{
+            font-size: 12px;
+            color: #dc3545;
+            margin-top: 5px;
+        }}
     </style>
 </head>
 <body>
@@ -594,21 +705,40 @@ def generate_html_report(data):
     # 1. USD Reserve Share
     cofer = data.get("cofer", {})
     status = cofer.get("status", "unknown")
+    
     if cofer.get("success"):
-        html += f"""
+        value_display = f"{cofer.get('value')}%"
+        period_display = cofer.get('period', 'N/A')
+        change_1y = format_change(cofer.get('change_1y'), ' pp')
+        change_5y = format_change(cofer.get('change_5y'), ' pp')
+        freshness = cofer.get('data_freshness', 'Unknown')
+        source = cofer.get('source', 'IMF COFER')
+        error_note = ""
+    else:
+        value_display = "N/A"
+        period_display = "N/A"
+        change_1y = "N/A"
+        change_5y = "N/A"
+        freshness = "Unknown"
+        source = cofer.get('source', 'IMF COFER')
+        error_note = f'<div class="error-note">Could not fetch data: {cofer.get("error", "Unknown error")}</div>'
+    
+    html += f"""
     <div class="indicator {status}">
         <div class="indicator-title">
             USD Share of Global Reserves
-            <span class="status-label status-{status}">{status}</span>
+            <span class="status-label status-{status}">{status.upper()}</span>
         </div>
-        <div class="indicator-value">{cofer.get('value', 'N/A')}%</div>
+        <div class="indicator-value">{value_display}</div>
         <div class="indicator-details">
             <table>
-                <tr><td>Period</td><td>{cofer.get('period', 'N/A')}</td></tr>
-                <tr><td>1-year change</td><td>{format_change(cofer.get('change_1y'), '%')}</td></tr>
-                <tr><td>5-year change</td><td>{format_change(cofer.get('change_5y'), '%')}</td></tr>
+                <tr><td>Period</td><td>{period_display}</td></tr>
+                <tr><td>1-year change</td><td>{change_1y}</td></tr>
+                <tr><td>5-year change</td><td>{change_5y}</td></tr>
             </table>
+            {error_note}
         </div>
+        <div class="data-freshness">Data as of: {freshness} | Source: {source}</div>
         <div class="threshold-note">
             Warning: below {THRESHOLDS['usd_reserve_share']['warning']}% | 
             Critical: below {THRESHOLDS['usd_reserve_share']['critical']}%<br>
@@ -616,39 +746,44 @@ def generate_html_report(data):
         </div>
     </div>
 """
-    else:
-        html += f"""
-    <div class="indicator unknown">
-        <div class="indicator-title">
-            USD Share of Global Reserves
-            <span class="status-label status-unknown">unavailable</span>
-        </div>
-        <div class="indicator-details">
-            Could not fetch data: {cofer.get('error', 'Unknown error')}<br>
-            Source: IMF COFER database
-        </div>
-    </div>
-"""
     
     # 2. China Treasury Holdings
     china = data.get("china", {})
     status = china.get("status", "unknown")
-    if china.get("current") or china.get("value"):
-        val = china.get('value') or china.get('current', 'N/A')
-        html += f"""
+    
+    if china.get("current") is not None:
+        value_display = f"${china.get('current')}B"
+        change_6mo = format_change(china.get('change_6mo'), 'B')
+        change_12mo = format_change(china.get('change_12mo'), 'B')
+        trend = 'Selling' if (china.get('change_12mo') or 0) < -10 else 'Accumulating' if (china.get('change_12mo') or 0) > 10 else 'Stable'
+        freshness = china.get('data_freshness', 'Unknown')
+        source = china.get('source', 'Treasury TIC')
+        error_note = ""
+    else:
+        value_display = "N/A"
+        change_6mo = "N/A"
+        change_12mo = "N/A"
+        trend = "Unknown"
+        freshness = "Unknown"
+        source = "Treasury TIC"
+        error_note = f'<div class="error-note">Could not fetch data: {china.get("error", "Unknown error")}</div>'
+    
+    html += f"""
     <div class="indicator {status}">
         <div class="indicator-title">
             China Treasury Holdings
-            <span class="status-label status-{status}">{status}</span>
+            <span class="status-label status-{status}">{status.upper()}</span>
         </div>
-        <div class="indicator-value">${val}B</div>
+        <div class="indicator-value">{value_display}</div>
         <div class="indicator-details">
             <table>
-                <tr><td>6-month change</td><td>{format_change(china.get('change_6mo'), 'B')}</td></tr>
-                <tr><td>12-month change</td><td>{format_change(china.get('change_12mo'), 'B')}</td></tr>
+                <tr><td>6-month change</td><td>{change_6mo}</td></tr>
+                <tr><td>12-month change</td><td>{change_12mo}</td></tr>
             </table>
-            <p>Trend: {'Selling' if (china.get('change_12mo') or 0) < 0 else 'Accumulating' if (china.get('change_12mo') or 0) > 0 else 'Flat'}</p>
+            <p>Trend: {trend}</p>
+            {error_note}
         </div>
+        <div class="data-freshness">Data as of: {freshness} | Source: {source}</div>
         <div class="threshold-note">
             Warning: below ${THRESHOLDS['china_treasury']['warning']}B | 
             Critical: below ${THRESHOLDS['china_treasury']['critical']}B<br>
@@ -656,39 +791,44 @@ def generate_html_report(data):
         </div>
     </div>
 """
-    else:
-        html += f"""
-    <div class="indicator unknown">
-        <div class="indicator-title">
-            China Treasury Holdings
-            <span class="status-label status-unknown">unavailable</span>
-        </div>
-        <div class="indicator-details">
-            Could not fetch data: {china.get('error', 'Unknown error')}<br>
-            Source: Treasury TIC data
-        </div>
-    </div>
-"""
     
     # 3. Japan Treasury Holdings
     japan = data.get("japan", {})
     status = japan.get("status", "unknown")
-    if japan.get("current") or japan.get("value"):
-        val = japan.get('value') or japan.get('current', 'N/A')
-        html += f"""
+    
+    if japan.get("current") is not None:
+        value_display = f"${japan.get('current')}B"
+        change_6mo = format_change(japan.get('change_6mo'), 'B')
+        change_12mo = format_change(japan.get('change_12mo'), 'B')
+        trend = 'Selling' if (japan.get('change_12mo') or 0) < -10 else 'Accumulating' if (japan.get('change_12mo') or 0) > 10 else 'Stable'
+        freshness = japan.get('data_freshness', 'Unknown')
+        source = japan.get('source', 'Treasury TIC')
+        error_note = ""
+    else:
+        value_display = "N/A"
+        change_6mo = "N/A"
+        change_12mo = "N/A"
+        trend = "Unknown"
+        freshness = "Unknown"
+        source = "Treasury TIC"
+        error_note = f'<div class="error-note">Could not fetch data: {japan.get("error", "Unknown error")}</div>'
+    
+    html += f"""
     <div class="indicator {status}">
         <div class="indicator-title">
             Japan Treasury Holdings
-            <span class="status-label status-{status}">{status}</span>
+            <span class="status-label status-{status}">{status.upper()}</span>
         </div>
-        <div class="indicator-value">${val}B</div>
+        <div class="indicator-value">{value_display}</div>
         <div class="indicator-details">
             <table>
-                <tr><td>6-month change</td><td>{format_change(japan.get('change_6mo'), 'B')}</td></tr>
-                <tr><td>12-month change</td><td>{format_change(japan.get('change_12mo'), 'B')}</td></tr>
+                <tr><td>6-month change</td><td>{change_6mo}</td></tr>
+                <tr><td>12-month change</td><td>{change_12mo}</td></tr>
             </table>
-            <p>Trend: {'Selling' if (japan.get('change_12mo') or 0) < 0 else 'Accumulating' if (japan.get('change_12mo') or 0) > 0 else 'Flat'}</p>
+            <p>Trend: {trend}</p>
+            {error_note}
         </div>
+        <div class="data-freshness">Data as of: {freshness} | Source: {source}</div>
         <div class="threshold-note">
             Warning: below ${THRESHOLDS['japan_treasury']['warning']}B | 
             Critical: below ${THRESHOLDS['japan_treasury']['critical']}B<br>
@@ -696,37 +836,44 @@ def generate_html_report(data):
         </div>
     </div>
 """
-    else:
-        html += f"""
-    <div class="indicator unknown">
-        <div class="indicator-title">
-            Japan Treasury Holdings
-            <span class="status-label status-unknown">unavailable</span>
-        </div>
-        <div class="indicator-details">
-            Could not fetch data: {japan.get('error', 'Unknown error')}<br>
-            Source: Treasury TIC data
-        </div>
-    </div>
-"""
     
     # 4. DXY
     dxy = data.get("dxy", {})
     status = dxy.get("status", "unknown")
+    
     if dxy.get("success"):
-        html += f"""
+        value_display = f"{dxy.get('value')}"
+        change_1y = format_change(dxy.get('change_1y'))
+        change_3y = format_change(dxy.get('change_3y'))
+        year_ago_display = f"{dxy.get('year_ago', 'N/A')} ({dxy.get('year_ago_date', 'N/A')})"
+        freshness = dxy.get('data_freshness', 'Unknown')
+        source = dxy.get('source', 'Yahoo Finance')
+        error_note = ""
+    else:
+        value_display = "N/A"
+        change_1y = "N/A"
+        change_3y = "N/A"
+        year_ago_display = "N/A"
+        freshness = "Unknown"
+        source = dxy.get('source', 'Yahoo Finance')
+        error_note = f'<div class="error-note">Could not fetch data: {dxy.get("error", "Unknown error")}</div>'
+    
+    html += f"""
     <div class="indicator {status}">
         <div class="indicator-title">
             Dollar Index (DXY)
-            <span class="status-label status-{status}">{status}</span>
+            <span class="status-label status-{status}">{status.upper()}</span>
         </div>
-        <div class="indicator-value">{dxy.get('value', 'N/A')}</div>
+        <div class="indicator-value">{value_display}</div>
         <div class="indicator-details">
             <table>
-                <tr><td>1-year change</td><td>{format_change(dxy.get('change_1y'))}</td></tr>
-                <tr><td>3-year change</td><td>{format_change(dxy.get('change_3y'))}</td></tr>
+                <tr><td>1-year ago</td><td>{year_ago_display}</td></tr>
+                <tr><td>1-year change</td><td>{change_1y}</td></tr>
+                <tr><td>3-year change</td><td>{change_3y}</td></tr>
             </table>
+            {error_note}
         </div>
+        <div class="data-freshness">Data as of: {freshness} | Source: {source}</div>
         <div class="threshold-note">
             Warning: below {THRESHOLDS['dxy']['warning']} | 
             Critical: below {THRESHOLDS['dxy']['critical']}<br>
@@ -734,34 +881,38 @@ def generate_html_report(data):
         </div>
     </div>
 """
-    else:
-        html += f"""
-    <div class="indicator unknown">
-        <div class="indicator-title">
-            Dollar Index (DXY)
-            <span class="status-label status-unknown">unavailable</span>
-        </div>
-        <div class="indicator-details">
-            Could not fetch data: {dxy.get('error', 'Unknown error')}<br>
-            Source: Yahoo Finance
-        </div>
-    </div>
-"""
     
     # 5. Debt to GDP
     debt = data.get("debt_to_gdp", {})
     status = debt.get("status", "unknown")
+    
     if debt.get("success"):
-        html += f"""
+        value_display = f"{debt.get('value')}%"
+        date_display = debt.get('date', 'N/A')
+        freshness = debt.get('data_freshness', 'Unknown')
+        source = debt.get('source', 'FRED')
+        error_note = ""
+    else:
+        value_display = "N/A"
+        date_display = "N/A"
+        freshness = "Unknown"
+        source = debt.get('source', 'FRED')
+        error_note = f'<div class="error-note">Could not fetch data: {debt.get("error", "Unknown error")}</div>'
+    
+    html += f"""
     <div class="indicator {status}">
         <div class="indicator-title">
             US Debt-to-GDP Ratio
-            <span class="status-label status-{status}">{status}</span>
+            <span class="status-label status-{status}">{status.upper()}</span>
         </div>
-        <div class="indicator-value">{debt.get('value', 'N/A')}%</div>
+        <div class="indicator-value">{value_display}</div>
         <div class="indicator-details">
-            As of: {debt.get('date', 'N/A')}
+            <table>
+                <tr><td>As of</td><td>{date_display}</td></tr>
+            </table>
+            {error_note}
         </div>
+        <div class="data-freshness">Data as of: {freshness} | Source: {source}</div>
         <div class="threshold-note">
             Warning: above {THRESHOLDS['debt_to_gdp']['warning']}% | 
             Critical: above {THRESHOLDS['debt_to_gdp']['critical']}%<br>
@@ -769,34 +920,44 @@ def generate_html_report(data):
         </div>
     </div>
 """
-    else:
-        html += f"""
-    <div class="indicator unknown">
-        <div class="indicator-title">
-            US Debt-to-GDP Ratio
-            <span class="status-label status-unknown">unavailable</span>
-        </div>
-        <div class="indicator-details">
-            Could not fetch data: {debt.get('error', 'Unknown error')}<br>
-            Source: FRED (St. Louis Fed)
-        </div>
-    </div>
-"""
     
     # 6. Interest to Revenue
     interest = data.get("interest_to_revenue", {})
     status = interest.get("status", "unknown")
+    
     if interest.get("success"):
-        html += f"""
+        value_display = f"{interest.get('value')}%"
+        date_display = interest.get('date', 'N/A')
+        interest_amt = f"${interest.get('interest', 'N/A')}B"
+        revenue_amt = f"${interest.get('revenue', 'N/A')}B"
+        freshness = interest.get('data_freshness', 'Unknown')
+        source = interest.get('source', 'FRED')
+        error_note = ""
+    else:
+        value_display = "N/A"
+        date_display = "N/A"
+        interest_amt = "N/A"
+        revenue_amt = "N/A"
+        freshness = "Unknown"
+        source = interest.get('source', 'FRED')
+        error_note = f'<div class="error-note">Could not fetch data: {interest.get("error", "Unknown error")}</div>'
+    
+    html += f"""
     <div class="indicator {status}">
         <div class="indicator-title">
             Interest Payments as % of Revenue
-            <span class="status-label status-{status}">{status}</span>
+            <span class="status-label status-{status}">{status.upper()}</span>
         </div>
-        <div class="indicator-value">{interest.get('value', 'N/A')}%</div>
+        <div class="indicator-value">{value_display}</div>
         <div class="indicator-details">
-            As of: {interest.get('date', 'N/A')}
+            <table>
+                <tr><td>Quarterly interest payments</td><td>{interest_amt}</td></tr>
+                <tr><td>Quarterly revenue</td><td>{revenue_amt}</td></tr>
+                <tr><td>As of</td><td>{date_display}</td></tr>
+            </table>
+            {error_note}
         </div>
+        <div class="data-freshness">Data as of: {freshness} | Source: {source}</div>
         <div class="threshold-note">
             Warning: above {THRESHOLDS['interest_to_revenue']['warning']}% | 
             Critical: above {THRESHOLDS['interest_to_revenue']['critical']}%<br>
@@ -804,58 +965,53 @@ def generate_html_report(data):
         </div>
     </div>
 """
-    else:
-        html += f"""
-    <div class="indicator unknown">
-        <div class="indicator-title">
-            Interest Payments as % of Revenue
-            <span class="status-label status-unknown">unavailable</span>
-        </div>
-        <div class="indicator-details">
-            Could not fetch data: {interest.get('error', 'Unknown error')}<br>
-            Source: FRED (St. Louis Fed)
-        </div>
-    </div>
-"""
     
     # 7. International vs US Performance
     perf = data.get("intl_vs_us", {})
     status = perf.get("status", "unknown")
+    
     if perf.get("success"):
         diff_3y = perf.get('diff_3y', 0) or 0
+        value_display = format_change(perf.get('diff_3y'), '%')
         direction = "International outperforming" if diff_3y > 0 else "US outperforming" if diff_3y < 0 else "Roughly even"
-        html += f"""
+        intl_3y = format_change(perf.get('intl_return_3y'), '%')
+        us_3y = format_change(perf.get('us_return_3y'), '%')
+        diff_1y = format_change(perf.get('diff_1y'), '%')
+        freshness = perf.get('data_freshness', 'Unknown')
+        source = perf.get('source', 'Yahoo Finance')
+        error_note = ""
+    else:
+        value_display = "N/A"
+        direction = "Unknown"
+        intl_3y = "N/A"
+        us_3y = "N/A"
+        diff_1y = "N/A"
+        freshness = "Unknown"
+        source = perf.get('source', 'Yahoo Finance')
+        error_note = f'<div class="error-note">Could not fetch data: {perf.get("error", "Unknown error")}</div>'
+    
+    html += f"""
     <div class="indicator {status}">
         <div class="indicator-title">
             International vs US Stocks (3-Year)
-            <span class="status-label status-{status}">{status}</span>
+            <span class="status-label status-{status}">{status.upper()}</span>
         </div>
-        <div class="indicator-value">{format_change(perf.get('diff_3y'), '%')}</div>
+        <div class="indicator-value">{value_display}</div>
         <div class="indicator-details">
             <table>
-                <tr><td>International 3yr return (VXUS)</td><td>{format_change(perf.get('intl_return_3y'), '%')}</td></tr>
-                <tr><td>US 3yr return (VTI)</td><td>{format_change(perf.get('us_return_3y'), '%')}</td></tr>
-                <tr><td>1-year difference</td><td>{format_change(perf.get('diff_1y'), '%')}</td></tr>
+                <tr><td>International 3yr return (VXUS)</td><td>{intl_3y}</td></tr>
+                <tr><td>US 3yr return (VTI)</td><td>{us_3y}</td></tr>
+                <tr><td>1-year difference</td><td>{diff_1y}</td></tr>
             </table>
-            <p>{direction}</p>
+            <p><strong>{direction}</strong></p>
+            <p style="font-size: 12px; color: #666;">VXUS (Total International, ex-US) vs VTI (Total US Market). These are good proxies for FTIHX vs FXAIX.</p>
+            {error_note}
         </div>
+        <div class="data-freshness">Data as of: {freshness} | Source: {source}</div>
         <div class="threshold-note">
             Warning: International ahead by {THRESHOLDS['intl_vs_us_3yr']['warning']}%+ | 
             Critical: ahead by {THRESHOLDS['intl_vs_us_3yr']['critical']}%+<br>
             {THRESHOLDS['intl_vs_us_3yr']['context']}
-        </div>
-    </div>
-"""
-    else:
-        html += f"""
-    <div class="indicator unknown">
-        <div class="indicator-title">
-            International vs US Stocks (3-Year)
-            <span class="status-label status-unknown">unavailable</span>
-        </div>
-        <div class="indicator-details">
-            Could not fetch data: {perf.get('error', 'Unknown error')}<br>
-            Source: Yahoo Finance (VXUS vs VTI)
         </div>
     </div>
 """
@@ -867,11 +1023,11 @@ def generate_html_report(data):
         <p><strong>What to do with this information:</strong></p>
         <ul>
             <li><strong>All stable:</strong> No action needed. Check back in 6 months.</li>
-            <li><strong>1-2 warnings:</strong> Note it, but don't react to a single report. Watch for trends.</li>
+            <li><strong>1-2 warnings:</strong> Note it, but don't react to a single report. Watch for trends across multiple reports.</li>
             <li><strong>Warnings for 2-3 consecutive reports:</strong> Consider gradually shifting from 65/35 to 50/50 domestic/international.</li>
             <li><strong>Multiple critical signals:</strong> More aggressive rebalancing toward international may be warranted.</li>
         </ul>
-        <p>Remember: These are slow-moving structural indicators. Empire decline happens over decades, not months.</p>
+        <p style="margin-top: 15px;">Remember: These are slow-moving structural indicators. Monetary system changes happen over decades, not months. The goal is to catch sustained trends, not react to noise.</p>
     </div>
 """
     
@@ -933,11 +1089,11 @@ def main():
     data = {}
     
     # 1. IMF COFER
-    print("Fetching USD reserve share (IMF COFER)...")
+    print("Fetching USD reserve share (IMF COFER via DBnomics)...")
     cofer = fetch_imf_cofer()
     if cofer.get("success"):
         cofer["status"] = assess_status(cofer.get("value"), "usd_reserve_share")
-        print(f"  Value: {cofer['value']}% - Status: {cofer['status']}")
+        print(f"  Value: {cofer['value']}% ({cofer.get('period')}) - Status: {cofer['status']}")
     else:
         cofer["status"] = "unknown"
         print(f"  Failed: {cofer.get('error')}")
@@ -948,8 +1104,6 @@ def main():
     treasury = fetch_treasury_holdings()
     
     if treasury.get("success"):
-        print(f"  Data date: {treasury.get('data_date', 'Unknown')}")
-        
         if "china" in treasury:
             china = treasury["china"]
             china["value"] = china["current"]
@@ -957,7 +1111,7 @@ def main():
             print(f"  China: ${china['current']}B - Status: {china['status']}")
             data["china"] = china
         else:
-            data["china"] = {"status": "unknown", "error": "China data not found"}
+            data["china"] = {"status": "unknown", "error": "China data not found in TIC report"}
             print("  China: Not found")
         
         if "japan" in treasury:
@@ -967,7 +1121,7 @@ def main():
             print(f"  Japan: ${japan['current']}B - Status: {japan['status']}")
             data["japan"] = japan
         else:
-            data["japan"] = {"status": "unknown", "error": "Japan data not found"}
+            data["japan"] = {"status": "unknown", "error": "Japan data not found in TIC report"}
             print("  Japan: Not found")
     else:
         print(f"  Failed: {treasury.get('error')}")
@@ -1008,7 +1162,7 @@ def main():
     data["interest_to_revenue"] = interest
     
     # 7. International vs US Performance
-    print("Fetching International vs US performance...")
+    print("Fetching International vs US performance (VXUS vs VTI)...")
     perf = fetch_intl_vs_us_performance()
     if perf.get("success"):
         perf["status"] = assess_status(perf.get("value"), "intl_vs_us_3yr")
@@ -1028,14 +1182,20 @@ def main():
         f.write(html)
     print("Saved to bretton_woods_report.html")
     
-    # Determine subject
-    statuses = [d.get("status") for d in data.values() if isinstance(d, dict) and d.get("status") != "unknown"]
+    # Determine subject based on known statuses only
+    statuses = []
+    for d in data.values():
+        if isinstance(d, dict) and d.get("success", False):
+            statuses.append(d.get("status", "unknown"))
+    
     if "critical" in statuses:
         subject = f"Bretton Woods Decay: CRITICAL - {datetime.now().strftime('%B %Y')}"
     elif "warning" in statuses:
         subject = f"Bretton Woods Decay: Warning - {datetime.now().strftime('%B %Y')}"
-    else:
+    elif statuses:
         subject = f"Bretton Woods Decay: Stable - {datetime.now().strftime('%B %Y')}"
+    else:
+        subject = f"Bretton Woods Decay: Data Unavailable - {datetime.now().strftime('%B %Y')}"
     
     # Send email
     print()
