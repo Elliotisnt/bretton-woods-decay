@@ -1,53 +1,42 @@
-# Bretton Woods Decay - Semi-Annual Macro Indicator Monitor
-# 
-# This workflow runs twice yearly (January 15 and July 15) to check key indicators
-# of US dollar/empire structural health and sends an email report.
-#
-# Required Secrets:
-#   - ICLOUD_EMAIL: Your iCloud email address (used to send)
-#   - ICLOUD_PASSWORD: An app-specific password (NOT your regular iCloud password)
-#                      Generate at: appleid.apple.com -> Sign-In and Security -> App-Specific Passwords
-#   - TO_EMAIL: Email address to receive the reports (can be same as ICLOUD_EMAIL)
-
 name: Bretton Woods Decay Report
 
 on:
-  # Run on January 15th and July 15th at 2PM UTC (9AM Eastern, 6AM Pacific)
+  # Run semi-annually: January 15 and July 15 at 9 AM Eastern (2 PM UTC)
   schedule:
-    - cron: '0 14 15 1 *'   # January 15th
-    - cron: '0 14 15 7 *'   # July 15th
+    - cron: '0 14 15 1 *'   # January 15
+    - cron: '0 14 15 7 *'   # July 15
   
-  # Allow manual runs for testing
+  # Allow manual trigger
   workflow_dispatch:
 
 jobs:
-  generate_report:
+  generate-report:
     runs-on: ubuntu-latest
     
     steps:
-      - name: Checkout code
+      - name: Checkout repository
         uses: actions/checkout@v4
-
+      
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-
+      
       - name: Install dependencies
-        run: pip install requests
-
-      - name: Run Bretton Woods Decay
+        run: |
+          pip install requests
+      
+      - name: Run report generator
         env:
           ICLOUD_EMAIL: ${{ secrets.ICLOUD_EMAIL }}
           ICLOUD_PASSWORD: ${{ secrets.ICLOUD_PASSWORD }}
           TO_EMAIL: ${{ secrets.TO_EMAIL }}
-        run: python bretton_woods_decay.py
-
-      # Save the HTML report as an artifact (useful for debugging)
+        run: |
+          python bretton_woods_decay.py
+      
       - name: Upload report artifact
         uses: actions/upload-artifact@v4
-        if: always()
         with:
-          name: bretton-woods-report-${{ github.run_number }}
+          name: bretton-woods-report
           path: bretton_woods_report.html
           retention-days: 90
