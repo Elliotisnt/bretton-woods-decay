@@ -1,6 +1,6 @@
 # Bretton Woods Decay Monitor
 
-Semi-annual macro indicator monitoring system to track structural changes in US dollar hegemony.
+Semi-annual macro indicator emails to keep tabs on the slow decline of the US financial system and the dollar. Focused on empire decline rather than market crashes. Indicators are lagging, but give more signal than my noisy twitter feed. Will use for consideration of shifting retirement composition from FXAIX to FTIHX.
 
 ## Purpose
 
