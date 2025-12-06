@@ -1,7 +1,5 @@
 # Bretton Woods Decay Monitor
 
-A quarterly macro indicator monitoring system that tracks structural changes in US dollar hegemony.
-
 A quarterly macro indicator monitoring system that tracks structural changes in US dollar hegemony. Focused on empire decline rather than market crashes. Indicators are lagging, but give more signal than my noisy twitter feed. Will use for consideration of shifting retirement composition from FXAIX to FTIHX.
 
 ## What It Is
