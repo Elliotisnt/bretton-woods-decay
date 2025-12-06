@@ -16,13 +16,13 @@ This tool tracks seven slow-moving structural indicators that might signal a shi
 | **Dollar Index (DXY)** | USD vs basket of 6 major currencies | <90 | <80 |
 | **US Debt-to-GDP** | Federal debt as percentage of GDP | >130% | >150% |
 | **Interest/Revenue Ratio** | Federal interest payments as % of revenue | >20% | >25% |
-| **Intl vs US Stocks (3yr)** | International equity outperformance | +15% | +30% |
+| **International equity outperformance (3yr rolling)** | International equity outperformance | +15% | +30% |
 
 Each indicator includes historical context for scale. For example, the DXY hit an all-time high of 164.7 in February 1985 and an all-time low of 70.7 in March 2008. Japan maintains ~260% debt-to-GDP but only pays ~8% of revenue to interest due to domestic ownership and near-zero rates, demonstrating that debt levels alone don't tell the whole story.
 
 ## Why I Made It
 
-I've got a (hopefully) long life ahead of me, and I started my retirement early and put 30% of my income into it. I'm deeply suspicious of the longevity of the American empire, but I don't want to miss out on long-term gains while the market is still performant. The US has been in decline / stagflation since post-Vietnam war, but had I pulled out of S&P 500 then I would've missed out on 75,000% percent growth. I want to try to make good long-term retirement allocation decisions (like whether to hold 65/35 or 50/50 domestic/international), and these decisions shouldn't be made based on short-term market noise. I also don't want to ignore structural shifts in the global monetary system, hence these quarterly emails. Was first inspired to switch to 65/35 by this video by Hank Green, https://youtu.be/VZMFp-mEWoM.
+I've got a (hopefully) long life ahead of me, and I started my retirement early and put 30% of my income into it. I'm deeply suspicious of the longevity of the American empire, but I don't want to miss out on long-term gains while the market is still performant. The US has shown signs of relative decline since the end of Bretton Woods in 1971, but had I pulled out of the S&P 500 then, I would've missed out on 34,000% growth! The empire can be weakening structurally while the market keeps coasting along. I want to try to make good long-term retirement allocation decisions (like whether to hold 65/35 or 50/50 domestic/international), and these decisions shouldn't be made based on short-term market noise. I also don't want to ignore structural shifts in the global monetary system, hence these quarterly emails. Was first inspired to switch to 65/35 by this video by Hank Green, https://youtu.be/VZMFp-mEWoM.
 
 This tool sends me a quarterly email with these indicators so I can:
 - Keep tabs on sustained trends over multiple reports
@@ -45,7 +45,7 @@ The goal is to catch sustained trends, not react to noise.
 - **IMF COFER**: Currency Composition of Official Foreign Exchange Reserves (via DBnomics)
 - **Treasury TIC**: Treasury International Capital reporting
 - **FRED**: Federal Reserve Economic Data (OMB fiscal year series for interest/revenue)
-- **Yahoo Finance**: DXY and ETF data (VXUS vs VTI)
+- **Yahoo Finance**: DXY and ETF data (VXUS vs VTI as proxies for FTIHX/FXAIX)
 
 ## Disclaimer
 
