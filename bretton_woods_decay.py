@@ -99,7 +99,7 @@ THRESHOLDS = {
         "direction": "above",
         "unit": "%",
         "description": "Interest payments vs defense spending (Guns vs Debt)",
-        "context": "Crossed 100% for first time in FY2024 ($970B interest vs $874B defense). Historically, empires decline when debt service exceeds military spending."
+        "context": "Crossed 100% for the first time in 2024 (~$880B interest vs ~$820B defense). Niall Ferguson's research shows great powers historically decline when debt service exceeds military spending—true of Hapsburg Spain, ancien régime France, the Ottoman Empire, and the British Empire."
     },
     "trade_balance_gdp": {
         "warning": -1.5,
@@ -107,15 +107,7 @@ THRESHOLDS = {
         "direction": "above",
         "unit": "%",
         "description": "Trade balance as % of GDP",
-        "context": "Currently around -3% of GDP. A sharp narrowing toward zero could signal forced adjustment (world stops extending credit) rather than improving competitiveness."
-    },
-    "empire_premium": {
-        "warning": 2.0,
-        "critical": 1.5,
-        "direction": "below",
-        "unit": "x",
-        "description": "US valuation premium (VTI/VXUS Price-to-Book)",
-        "context": "Currently ~2.5x. US stocks trade at significant premium to international. Compression toward 1.5x or below would signal fading American exceptionalism in equity markets."
+        "context": "The US has run continuous deficits since 1976, currently ~-3% of GDP. Peak deficit was -5.7% in 2006. A rapid move toward zero (less negative) would signal the world is no longer willing to finance US consumption—a forced adjustment rather than improving competitiveness. The deficit itself isn't the concern; sudden narrowing is."
     }
 }
 
@@ -689,55 +681,6 @@ def fetch_trade_balance_gdp():
     except Exception as e:
         return {"success": False, "error": str(e), "source": "FRED"}
 
-
-def fetch_empire_premium():
-    """
-    Calculate US valuation premium via Price-to-Book ratio.
-    VTI P/B / VXUS P/B
-    Uses Yahoo Finance API.
-    """
-    try:
-        def get_price_to_book(symbol):
-            url = f"https://query1.finance.yahoo.com/v10/finance/quoteSummary/{symbol}?modules=defaultKeyStatistics,summaryDetail"
-            headers = {**HEADERS, "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
-            response = requests.get(url, headers=headers, timeout=30)
-            
-            if response.status_code == 200:
-                data = response.json()
-                result = data.get("quoteSummary", {}).get("result", [{}])[0]
-                
-                # Try defaultKeyStatistics first
-                key_stats = result.get("defaultKeyStatistics", {})
-                pb = key_stats.get("priceToBook", {}).get("raw")
-                
-                if pb is None:
-                    # Fallback to summaryDetail
-                    summary = result.get("summaryDetail", {})
-                    pb = summary.get("priceToBook", {}).get("raw")
-                
-                return pb
-            return None
-        
-        vti_pb = get_price_to_book("VTI")
-        vxus_pb = get_price_to_book("VXUS")
-        
-        if vti_pb and vxus_pb:
-            ratio = vti_pb / vxus_pb
-            
-            return {
-                "success": True,
-                "value": round(ratio, 2),
-                "vti_pb": round(vti_pb, 2),
-                "vxus_pb": round(vxus_pb, 2),
-                "date": datetime.now().strftime("%Y-%m-%d"),
-                "data_freshness": f"Live (as of {datetime.now().strftime('%Y-%m-%d')})",
-                "source": "Yahoo Finance (VTI/VXUS)"
-            }
-        
-        return {"success": False, "error": "Could not fetch P/B ratios", "source": "Yahoo Finance"}
-    except Exception as e:
-        return {"success": False, "error": str(e), "source": "Yahoo Finance"}
-
 # =============================================================================
 # ANALYSIS FUNCTIONS  
 # =============================================================================
@@ -792,7 +735,7 @@ def generate_html_report(data):
     # Collect all statuses (only from successful fetches)
     statuses = []
     status_counts = {"stable": 0, "warning": 0, "critical": 0, "unknown": 0}
-    total_metrics = 9  # Updated count
+    total_metrics = 8  # Updated count
     
     for key in data:
         if isinstance(data[key], dict) and "status" in data[key]:
@@ -1207,7 +1150,6 @@ def generate_html_report(data):
                 <tr><td>Quarterly interest (SAAR)</td><td>{interest_amt}</td></tr>
                 <tr><td>Quarterly revenue (SAAR)</td><td>{revenue_amt}</td></tr>
                 <tr><td>1-year change</td><td>{change_1y}</td></tr>
-                <tr><td>As of</td><td>{date_display}</td></tr>
             </table>
             {error_note}
         </div>
@@ -1255,7 +1197,6 @@ def generate_html_report(data):
                 <tr><td>Interest payments (SAAR)</td><td>{interest_amt}</td></tr>
                 <tr><td>Defense spending (SAAR)</td><td>{defense_amt}</td></tr>
                 <tr><td>1-year change</td><td>{change_1y}</td></tr>
-                <tr><td>As of</td><td>{date_display}</td></tr>
             </table>
             {error_note}
         </div>
@@ -1303,62 +1244,17 @@ def generate_html_report(data):
                 <tr><td>Trade balance (annualized)</td><td>{trade_amt}</td></tr>
                 <tr><td>GDP</td><td>{gdp_amt}</td></tr>
                 <tr><td>1-year change</td><td>{change_1y}</td></tr>
-                <tr><td>As of</td><td>{date_display}</td></tr>
             </table>
             {error_note}
         </div>
-        <div class="data-freshness">Data as of: {freshness} | Source: {source}</div>
         <div class="threshold-note">
-            Warning: above {THRESHOLDS['trade_balance_gdp']['warning']}% | 
-            Critical: above {THRESHOLDS['trade_balance_gdp']['critical']}%<br>
+            Warning: less negative than {THRESHOLDS['trade_balance_gdp']['warning']}% | 
+            Critical: less negative than {THRESHOLDS['trade_balance_gdp']['critical']}%<br>
             {THRESHOLDS['trade_balance_gdp']['context']}
         </div>
     </div>
 """
-    
-    # 9. Empire Premium (VTI/VXUS P/B)
-    premium = data.get("empire_premium", {})
-    status = premium.get("status", "unknown")
-    
-    if premium.get("success"):
-        value_display = f"{premium.get('value')}x"
-        vti_pb = f"{premium.get('vti_pb', 'N/A')}"
-        vxus_pb = f"{premium.get('vxus_pb', 'N/A')}"
-        freshness = premium.get('data_freshness', 'Unknown')
-        source = premium.get('source', 'Yahoo Finance')
-        error_note = ""
-    else:
-        value_display = "N/A"
-        vti_pb = "N/A"
-        vxus_pb = "N/A"
-        freshness = "Unknown"
-        source = premium.get('source', 'Yahoo Finance')
-        error_note = f'<div class="error-note">Could not fetch data: {premium.get("error", "Unknown error")}</div>'
-    
-    html += f"""
-    <div class="indicator {status}">
-        <div class="indicator-title">
-            Empire Premium (US Valuation Spread)
-            <span class="status-label status-{status}">{status.upper()}</span>
-        </div>
-        <div class="indicator-value">{value_display}</div>
-        <div class="indicator-details">
-            <table>
-                <tr><td>VTI Price-to-Book</td><td>{vti_pb}</td></tr>
-                <tr><td>VXUS Price-to-Book</td><td>{vxus_pb}</td></tr>
-            </table>
-            <p style="font-size: 12px; color: #666;">Ratio of US to International valuations. Higher = US trading at larger premium.</p>
-            {error_note}
-        </div>
-        <div class="data-freshness">Data as of: {freshness} | Source: {source}</div>
-        <div class="threshold-note">
-            Warning: below {THRESHOLDS['empire_premium']['warning']}x | 
-            Critical: below {THRESHOLDS['empire_premium']['critical']}x<br>
-            {THRESHOLDS['empire_premium']['context']}
-        </div>
-    </div>
-"""
-    
+
     # Market Context Section (Informational - Blue)
     html += """
     <h2>Market Context</h2>
@@ -1591,17 +1487,6 @@ def main():
         trade["status"] = "unknown"
         print(f"  Failed: {trade.get('error')}")
     data["trade_balance_gdp"] = trade
-    
-    # 9. Empire Premium (VTI/VXUS P/B)
-    print("Fetching Empire Premium (VTI/VXUS P/B)...")
-    premium = fetch_empire_premium()
-    if premium.get("success"):
-        premium["status"] = assess_status(premium.get("value"), "empire_premium")
-        print(f"  Value: {premium['value']}x - Status: {premium['status']}")
-    else:
-        premium["status"] = "unknown"
-        print(f"  Failed: {premium.get('error')}")
-    data["empire_premium"] = premium
     
     # 10. International vs US Performance (informational only)
     print("Fetching International vs US performance (VXUS vs VTI)...")

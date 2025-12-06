@@ -4,7 +4,7 @@ A quarterly macro indicator monitoring system that tracks structural changes in 
 
 ## What It Is
 
-This tool tracks nine slow-moving structural indicators that might signal a shift in dollar dominance:
+This tool tracks eight slow-moving structural indicators that might signal a shift in dollar dominance:
 
 | Indicator | What It Measures | Warning | Critical |
 |-----------|------------------|---------|----------|
@@ -16,7 +16,6 @@ This tool tracks nine slow-moving structural indicators that might signal a shif
 | **Interest/Revenue Ratio** | Federal interest payments as % of revenue | >20% | >22% |
 | **Interest/Defense Ratio** | Interest payments vs defense spending ("Guns vs Debt") | >100% | >120% |
 | **Trade Balance/GDP** | Trade balance as % of GDP (deficit narrowing = concern) | >-1.5% | >-0.5% |
-| **Empire Premium** | VTI/VXUS Price-to-Book spread (US valuation premium) | <2.0x | <1.5x |
 
 Plus an informational "Market Context" section showing International vs US stock performance (not a warning trigger).
 
@@ -52,7 +51,7 @@ The goal is to catch sustained trends, not react to noise.
   - FDEFX (Defense spending, quarterly SAAR)
   - BOPGSTB (Trade balance, monthly)
   - GDP (Gross Domestic Product, quarterly)
-- **Yahoo Finance**: DXY, VTI/VXUS Price-to-Book ratios, performance history
+- **Yahoo Finance**: DXY, VTI/VXUS performance history
 
 ## Disclaimer
 
