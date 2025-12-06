@@ -8,8 +8,13 @@ Tracks key indicators of US dollar/empire structural health:
 3. Japan holdings of US Treasuries (Treasury TIC)
 4. DXY Dollar Index (Yahoo Finance)
 5. US Debt-to-GDP ratio (FRED)
-6. Federal interest payments as % of revenue (FRED - OMB fiscal year data)
-7. International vs US stock performance (VXUS vs VTI)
+6. Federal interest payments as % of revenue (FRED - quarterly BEA)
+7. Interest vs defense spending - Guns vs Debt (FRED)
+8. Trade balance as % of GDP (FRED)
+9. Empire Premium - VTI/VXUS Price-to-Book spread (Yahoo Finance)
+
+Plus informational context:
+- International vs US stock performance (VXUS vs VTI)
 
 Designed to run quarterly (Jan, Apr, Jul, Oct) via GitHub Actions.
 Sends a formatted email report via iCloud SMTP.
@@ -82,22 +87,37 @@ THRESHOLDS = {
     },
     "interest_to_revenue": {
         "warning": 20.0,
-        "critical": 25.0,
+        "critical": 22.0,
         "direction": "above",
         "unit": "%",
         "description": "Federal interest payments as % of revenue",
         "context": "Previous peak was ~18% in 1991. Fell to ~6% by 2015 due to low rates. In 2025, Japan at ~260% debt/GDP only pays ~8% of revenue to interest due to BoJ ownership and near-zero rates."
     },
-    "intl_vs_us_3yr": {
-        "warning": 15.0,
-        "critical": 30.0,
+    "interest_to_defense": {
+        "warning": 100.0,
+        "critical": 120.0,
         "direction": "above",
         "unit": "%",
-        "description": "International vs US stocks (3-year cumulative)",
-        "context": "Positive = international outperforming. US has outperformed international for most of 2010-2024. Sustained reversal may signal dollar weakness or valuation normalization."
+        "description": "Interest payments vs defense spending (Guns vs Debt)",
+        "context": "Crossed 100% for first time in FY2024 ($970B interest vs $874B defense). Historically, empires decline when debt service exceeds military spending."
+    },
+    "trade_balance_gdp": {
+        "warning": -1.5,
+        "critical": -0.5,
+        "direction": "above",
+        "unit": "%",
+        "description": "Trade balance as % of GDP",
+        "context": "Currently around -3% of GDP. A sharp narrowing toward zero could signal forced adjustment (world stops extending credit) rather than improving competitiveness."
+    },
+    "empire_premium": {
+        "warning": 2.0,
+        "critical": 1.5,
+        "direction": "below",
+        "unit": "x",
+        "description": "US valuation premium (VTI/VXUS Price-to-Book)",
+        "context": "Currently ~2.5x. US stocks trade at significant premium to international. Compression toward 1.5x or below would signal fading American exceptionalism in equity markets."
     }
 }
-
 
 # =============================================================================
 # DATA FETCHING FUNCTIONS
@@ -363,22 +383,19 @@ def fetch_debt_to_gdp():
 
 def fetch_interest_to_revenue():
     """
-    Calculate interest payments as % of revenue using OMB fiscal year data.
-    FYOINT = Federal Outlays: Interest (fiscal year, millions)
-    FYFR = Federal Receipts (fiscal year, millions)
-    This matches Treasury's reported ~19% figure for FY2025.
+    Calculate interest payments as % of revenue using quarterly BEA data.
+    A091RC1Q027SBEA = Federal interest payments (quarterly SAAR, billions)
+    W006RC1Q027SBEA = Federal tax receipts (quarterly SAAR, billions)
     """
     try:
-        # OMB fiscal year data (annual, updated each fiscal year)
-        interest_url = "https://fred.stlouisfed.org/graph/fredgraph.csv?id=FYOINT"
-        revenue_url = "https://fred.stlouisfed.org/graph/fredgraph.csv?id=FYFR"
+        interest_url = "https://fred.stlouisfed.org/graph/fredgraph.csv?id=A091RC1Q027SBEA"
+        revenue_url = "https://fred.stlouisfed.org/graph/fredgraph.csv?id=W006RC1Q027SBEA"
         
         interest_resp = requests.get(interest_url, headers=HEADERS, timeout=30)
         revenue_resp = requests.get(revenue_url, headers=HEADERS, timeout=30)
         
         if interest_resp.status_code == 200 and revenue_resp.status_code == 200:
             def get_values(text):
-                """Get all values as list of (date, value) tuples."""
                 lines = text.strip().split('\n')
                 values = []
                 for line in lines[1:]:
@@ -391,41 +408,31 @@ def fetch_interest_to_revenue():
             revenue_vals = get_values(revenue_resp.text)
             
             if interest_vals and revenue_vals:
-                # Get latest values
                 interest_date, interest = interest_vals[-1]
                 revenue_date, revenue = revenue_vals[-1]
                 
-                # Calculate ratio
                 ratio = (interest / revenue) * 100
                 
-                # Get historical values for context
+                # Historical context (4 quarters back = 1 year)
                 year_ago_ratio = None
-                five_year_ratio = None
-                
-                if len(interest_vals) >= 2 and len(revenue_vals) >= 2:
-                    year_ago_ratio = (interest_vals[-2][1] / revenue_vals[-2][1]) * 100
-                
-                if len(interest_vals) >= 6 and len(revenue_vals) >= 6:
-                    five_year_ratio = (interest_vals[-6][1] / revenue_vals[-6][1]) * 100
+                if len(interest_vals) >= 5 and len(revenue_vals) >= 5:
+                    year_ago_ratio = (interest_vals[-5][1] / revenue_vals[-5][1]) * 100
                 
                 return {
                     "success": True,
                     "value": round(ratio, 1),
-                    "interest": round(interest / 1000, 1),  # Convert to billions
-                    "revenue": round(revenue / 1000, 1),    # Convert to billions
+                    "interest": round(interest, 1),
+                    "revenue": round(revenue, 1),
                     "date": interest_date,
-                    "data_freshness": f"FY {interest_date[:4]}",
-                    "source": "FRED (FYOINT / FYFR)",
+                    "data_freshness": interest_date,
+                    "source": "FRED (A091RC1Q027SBEA / W006RC1Q027SBEA)",
                     "year_ago": round(year_ago_ratio, 1) if year_ago_ratio else None,
-                    "five_year_ago": round(five_year_ratio, 1) if five_year_ratio else None,
-                    "change_1y": round(ratio - year_ago_ratio, 1) if year_ago_ratio else None,
-                    "change_5y": round(ratio - five_year_ratio, 1) if five_year_ratio else None
+                    "change_1y": round(ratio - year_ago_ratio, 1) if year_ago_ratio else None
                 }
         
-        return {"success": False, "error": "Could not calculate interest/revenue ratio", "source": "FRED"}
+        return {"success": False, "error": "Could not fetch quarterly interest/revenue data", "source": "FRED"}
     except Exception as e:
         return {"success": False, "error": str(e), "source": "FRED"}
-
 
 def fetch_dxy():
     """
@@ -551,6 +558,173 @@ def fetch_intl_vs_us_performance():
     except Exception as e:
         return {"success": False, "error": str(e), "source": "Yahoo Finance"}
 
+def fetch_interest_to_defense():
+    """
+    Calculate interest payments vs defense spending ratio.
+    A091RC1Q027SBEA = Federal interest payments (quarterly SAAR, billions)
+    FDEFX = National defense consumption & investment (quarterly SAAR, billions)
+    """
+    try:
+        interest_url = "https://fred.stlouisfed.org/graph/fredgraph.csv?id=A091RC1Q027SBEA"
+        defense_url = "https://fred.stlouisfed.org/graph/fredgraph.csv?id=FDEFX"
+        
+        interest_resp = requests.get(interest_url, headers=HEADERS, timeout=30)
+        defense_resp = requests.get(defense_url, headers=HEADERS, timeout=30)
+        
+        if interest_resp.status_code == 200 and defense_resp.status_code == 200:
+            def get_values(text):
+                lines = text.strip().split('\n')
+                values = []
+                for line in lines[1:]:
+                    parts = line.split(',')
+                    if len(parts) >= 2 and parts[1].strip() and parts[1] != '.':
+                        values.append((parts[0], float(parts[1])))
+                return values
+            
+            interest_vals = get_values(interest_resp.text)
+            defense_vals = get_values(defense_resp.text)
+            
+            if interest_vals and defense_vals:
+                interest_date, interest = interest_vals[-1]
+                defense_date, defense = defense_vals[-1]
+                
+                ratio = (interest / defense) * 100
+                
+                year_ago_ratio = None
+                if len(interest_vals) >= 5 and len(defense_vals) >= 5:
+                    year_ago_ratio = (interest_vals[-5][1] / defense_vals[-5][1]) * 100
+                
+                return {
+                    "success": True,
+                    "value": round(ratio, 1),
+                    "interest": round(interest, 1),
+                    "defense": round(defense, 1),
+                    "date": interest_date,
+                    "data_freshness": interest_date,
+                    "source": "FRED (A091RC1Q027SBEA / FDEFX)",
+                    "year_ago": round(year_ago_ratio, 1) if year_ago_ratio else None,
+                    "change_1y": round(ratio - year_ago_ratio, 1) if year_ago_ratio else None
+                }
+        
+        return {"success": False, "error": "Could not fetch interest/defense data", "source": "FRED"}
+    except Exception as e:
+        return {"success": False, "error": str(e), "source": "FRED"}
+
+
+def fetch_trade_balance_gdp():
+    """
+    Calculate trade balance as % of GDP.
+    BOPGSTB = Trade balance goods & services (monthly, millions)
+    GDP = Gross Domestic Product (quarterly, billions)
+    """
+    try:
+        trade_url = "https://fred.stlouisfed.org/graph/fredgraph.csv?id=BOPGSTB"
+        gdp_url = "https://fred.stlouisfed.org/graph/fredgraph.csv?id=GDP"
+        
+        trade_resp = requests.get(trade_url, headers=HEADERS, timeout=30)
+        gdp_resp = requests.get(gdp_url, headers=HEADERS, timeout=30)
+        
+        if trade_resp.status_code == 200 and gdp_resp.status_code == 200:
+            def get_values(text):
+                lines = text.strip().split('\n')
+                values = []
+                for line in lines[1:]:
+                    parts = line.split(',')
+                    if len(parts) >= 2 and parts[1].strip() and parts[1] != '.':
+                        values.append((parts[0], float(parts[1])))
+                return values
+            
+            trade_vals = get_values(trade_resp.text)
+            gdp_vals = get_values(gdp_resp.text)
+            
+            if trade_vals and gdp_vals:
+                # Average last 3 months of trade data
+                recent_trade = trade_vals[-3:] if len(trade_vals) >= 3 else trade_vals
+                avg_trade = sum(v[1] for v in recent_trade) / len(recent_trade)
+                trade_date = recent_trade[-1][0]
+                
+                # Get latest GDP
+                gdp_date, gdp = gdp_vals[-1]
+                
+                # Convert trade from millions to billions, then calculate ratio
+                # BOPGSTB is monthly, so annualize by multiplying by 12
+                trade_annual_billions = (avg_trade / 1000) * 12
+                ratio = (trade_annual_billions / gdp) * 100
+                
+                # Year ago comparison
+                year_ago_ratio = None
+                if len(trade_vals) >= 15 and len(gdp_vals) >= 5:
+                    year_ago_trade = trade_vals[-15:-12] if len(trade_vals) >= 15 else None
+                    if year_ago_trade:
+                        avg_trade_1y = sum(v[1] for v in year_ago_trade) / len(year_ago_trade)
+                        trade_1y_annual = (avg_trade_1y / 1000) * 12
+                        gdp_1y = gdp_vals[-5][1]
+                        year_ago_ratio = (trade_1y_annual / gdp_1y) * 100
+                
+                return {
+                    "success": True,
+                    "value": round(ratio, 2),
+                    "trade_balance": round(trade_annual_billions, 1),
+                    "gdp": round(gdp, 1),
+                    "date": trade_date,
+                    "data_freshness": trade_date,
+                    "source": "FRED (BOPGSTB / GDP)",
+                    "year_ago": round(year_ago_ratio, 2) if year_ago_ratio else None,
+                    "change_1y": round(ratio - year_ago_ratio, 2) if year_ago_ratio else None
+                }
+        
+        return {"success": False, "error": "Could not fetch trade balance/GDP data", "source": "FRED"}
+    except Exception as e:
+        return {"success": False, "error": str(e), "source": "FRED"}
+
+
+def fetch_empire_premium():
+    """
+    Calculate US valuation premium via Price-to-Book ratio.
+    VTI P/B / VXUS P/B
+    Uses Yahoo Finance API.
+    """
+    try:
+        def get_price_to_book(symbol):
+            url = f"https://query1.finance.yahoo.com/v10/finance/quoteSummary/{symbol}?modules=defaultKeyStatistics,summaryDetail"
+            headers = {**HEADERS, "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+            response = requests.get(url, headers=headers, timeout=30)
+            
+            if response.status_code == 200:
+                data = response.json()
+                result = data.get("quoteSummary", {}).get("result", [{}])[0]
+                
+                # Try defaultKeyStatistics first
+                key_stats = result.get("defaultKeyStatistics", {})
+                pb = key_stats.get("priceToBook", {}).get("raw")
+                
+                if pb is None:
+                    # Fallback to summaryDetail
+                    summary = result.get("summaryDetail", {})
+                    pb = summary.get("priceToBook", {}).get("raw")
+                
+                return pb
+            return None
+        
+        vti_pb = get_price_to_book("VTI")
+        vxus_pb = get_price_to_book("VXUS")
+        
+        if vti_pb and vxus_pb:
+            ratio = vti_pb / vxus_pb
+            
+            return {
+                "success": True,
+                "value": round(ratio, 2),
+                "vti_pb": round(vti_pb, 2),
+                "vxus_pb": round(vxus_pb, 2),
+                "date": datetime.now().strftime("%Y-%m-%d"),
+                "data_freshness": f"Live (as of {datetime.now().strftime('%Y-%m-%d')})",
+                "source": "Yahoo Finance (VTI/VXUS)"
+            }
+        
+        return {"success": False, "error": "Could not fetch P/B ratios", "source": "Yahoo Finance"}
+    except Exception as e:
+        return {"success": False, "error": str(e), "source": "Yahoo Finance"}
 
 # =============================================================================
 # ANALYSIS FUNCTIONS  
@@ -606,11 +780,14 @@ def generate_html_report(data):
     # Collect all statuses (only from successful fetches)
     statuses = []
     status_counts = {"stable": 0, "warning": 0, "critical": 0, "unknown": 0}
-    total_metrics = 7
+    total_metrics = 9  # Updated count
     
     for key in data:
         if isinstance(data[key], dict) and "status" in data[key]:
             status = data[key].get("status", "unknown")
+            # Skip info-only metrics (intl_vs_us) from status counts
+            if key == "intl_vs_us":
+                continue
             if data[key].get("success", False) or status != "unknown":
                 statuses.append(status)
                 status_counts[status] = status_counts.get(status, 0) + 1
@@ -620,27 +797,29 @@ def generate_html_report(data):
     critical_count = status_counts.get("critical", 0)
     successful_count = len([s for s in statuses if s != "unknown"])
     
-    if critical_count > 0:
+    # Overall status logic:
+    # Green: 0-1 warnings, 0 criticals
+    # Amber: 2+ warnings OR 1 critical
+    # Red: 3+ warnings OR 2+ criticals OR (1 critical + 2+ warnings)
+    if critical_count >= 2 or (critical_count >= 1 and warning_count >= 2) or warning_count >= 3:
         overall_color = "#dc3545"  # Red
-        if critical_count == 1 and warning_count == 0:
-            overall_summary = f"1 critical out of {successful_count} metrics"
-        elif critical_count == 1:
-            overall_summary = f"1 critical, {warning_count} warning out of {successful_count} metrics"
+        overall_summary = f"HIGH ALERT: {critical_count} critical, {warning_count} warning out of {successful_count} metrics"
+    elif critical_count >= 1 or warning_count >= 2:
+        overall_color = "#f39c12"  # Amber
+        if critical_count >= 1:
+            overall_summary = f"Elevated concern: {critical_count} critical, {warning_count} warning out of {successful_count} metrics"
         else:
-            overall_summary = f"{critical_count} critical, {warning_count} warning out of {successful_count} metrics"
-    elif warning_count > 0:
-        overall_color = "#e67e22"  # Amber/Orange
-        if warning_count == 1:
-            overall_summary = f"1 warning out of {successful_count} metrics"
-        else:
-            overall_summary = f"{warning_count} warnings out of {successful_count} metrics"
+            overall_summary = f"Elevated concern: {warning_count} warnings out of {successful_count} metrics"
+    elif warning_count == 1:
+        overall_color = "#27ae60"  # Green (1 warning is still green)
+        overall_summary = f"All {successful_count} metrics stable (1 warning)"
     elif successful_count > 0:
         overall_color = "#27ae60"  # Green
         overall_summary = f"All {successful_count} metrics stable"
     else:
         overall_color = "#95a5a6"  # Gray
         overall_summary = "Data unavailable"
-    
+
     html = f"""
 <!DOCTYPE html>
 <html>
@@ -684,8 +863,9 @@ def generate_html_report(data):
             border-left: 4px solid #ddd; 
         }}
         .indicator.critical {{ border-left-color: #dc3545; }}
-        .indicator.warning {{ border-left-color: #e67e22; }}
+        .indicator.warning {{ border-left-color: #f39c12; }}
         .indicator.stable {{ border-left-color: #27ae60; }}
+        .indicator.info {{ border-left-color: #3498db; }}
         .indicator.unknown {{ border-left-color: #95a5a6; }}
         .indicator-title {{
             font-weight: bold;
@@ -722,8 +902,9 @@ def generate_html_report(data):
             text-transform: uppercase;
         }}
         .status-critical {{ background: #dc3545; color: white; }}
-        .status-warning {{ background: #e67e22; color: white; }}
+        .status-warning {{ background: #f39c12; color: white; }}
         .status-stable {{ background: #27ae60; color: white; }}
+        .status-info {{ background: #3498db; color: white; }}
         .status-unknown {{ background: #95a5a6; color: white; }}
         table {{
             width: 100%;
@@ -1011,10 +1192,10 @@ def generate_html_report(data):
         <div class="indicator-value">{value_display}</div>
         <div class="indicator-details">
             <table>
-                <tr><td>Annual interest payments</td><td>{interest_amt}</td></tr>
-                <tr><td>Annual federal revenue</td><td>{revenue_amt}</td></tr>
+                <tr><td>Quarterly interest (SAAR)</td><td>{interest_amt}</td></tr>
+                <tr><td>Quarterly revenue (SAAR)</td><td>{revenue_amt}</td></tr>
                 <tr><td>1-year change</td><td>{change_1y}</td></tr>
-                <tr><td>Fiscal year</td><td>{date_display}</td></tr>
+                <tr><td>As of</td><td>{date_display}</td></tr>
             </table>
             {error_note}
         </div>
@@ -1027,9 +1208,153 @@ def generate_html_report(data):
     </div>
 """
     
-    # 7. International vs US Performance
+    # 7. Interest to Defense (Guns vs Debt)
+    int_def = data.get("interest_to_defense", {})
+    status = int_def.get("status", "unknown")
+    
+    if int_def.get("success"):
+        value_display = f"{int_def.get('value')}%"
+        date_display = int_def.get('date', 'N/A')
+        interest_amt = f"${int_def.get('interest', 'N/A')}B"
+        defense_amt = f"${int_def.get('defense', 'N/A')}B"
+        change_1y = format_change(int_def.get('change_1y'), '%') if int_def.get('change_1y') else "N/A"
+        freshness = int_def.get('data_freshness', 'Unknown')
+        source = int_def.get('source', 'FRED')
+        error_note = ""
+    else:
+        value_display = "N/A"
+        date_display = "N/A"
+        interest_amt = "N/A"
+        defense_amt = "N/A"
+        change_1y = "N/A"
+        freshness = "Unknown"
+        source = int_def.get('source', 'FRED')
+        error_note = f'<div class="error-note">Could not fetch data: {int_def.get("error", "Unknown error")}</div>'
+    
+    html += f"""
+    <div class="indicator {status}">
+        <div class="indicator-title">
+            Interest vs Defense Spending (Guns vs Debt)
+            <span class="status-label status-{status}">{status.upper()}</span>
+        </div>
+        <div class="indicator-value">{value_display}</div>
+        <div class="indicator-details">
+            <table>
+                <tr><td>Interest payments (SAAR)</td><td>{interest_amt}</td></tr>
+                <tr><td>Defense spending (SAAR)</td><td>{defense_amt}</td></tr>
+                <tr><td>1-year change</td><td>{change_1y}</td></tr>
+                <tr><td>As of</td><td>{date_display}</td></tr>
+            </table>
+            {error_note}
+        </div>
+        <div class="data-freshness">Data as of: {freshness} | Source: {source}</div>
+        <div class="threshold-note">
+            Warning: above {THRESHOLDS['interest_to_defense']['warning']}% | 
+            Critical: above {THRESHOLDS['interest_to_defense']['critical']}%<br>
+            {THRESHOLDS['interest_to_defense']['context']}
+        </div>
+    </div>
+"""
+    
+    # 8. Trade Balance / GDP
+    trade = data.get("trade_balance_gdp", {})
+    status = trade.get("status", "unknown")
+    
+    if trade.get("success"):
+        value_display = f"{trade.get('value')}%"
+        date_display = trade.get('date', 'N/A')
+        trade_amt = f"${trade.get('trade_balance', 'N/A')}B"
+        gdp_amt = f"${trade.get('gdp', 'N/A')}B"
+        change_1y = format_change(trade.get('change_1y'), '%') if trade.get('change_1y') else "N/A"
+        freshness = trade.get('data_freshness', 'Unknown')
+        source = trade.get('source', 'FRED')
+        error_note = ""
+    else:
+        value_display = "N/A"
+        date_display = "N/A"
+        trade_amt = "N/A"
+        gdp_amt = "N/A"
+        change_1y = "N/A"
+        freshness = "Unknown"
+        source = trade.get('source', 'FRED')
+        error_note = f'<div class="error-note">Could not fetch data: {trade.get("error", "Unknown error")}</div>'
+    
+    html += f"""
+    <div class="indicator {status}">
+        <div class="indicator-title">
+            Trade Balance as % of GDP
+            <span class="status-label status-{status}">{status.upper()}</span>
+        </div>
+        <div class="indicator-value">{value_display}</div>
+        <div class="indicator-details">
+            <table>
+                <tr><td>Trade balance (annualized)</td><td>{trade_amt}</td></tr>
+                <tr><td>GDP</td><td>{gdp_amt}</td></tr>
+                <tr><td>1-year change</td><td>{change_1y}</td></tr>
+                <tr><td>As of</td><td>{date_display}</td></tr>
+            </table>
+            {error_note}
+        </div>
+        <div class="data-freshness">Data as of: {freshness} | Source: {source}</div>
+        <div class="threshold-note">
+            Warning: above {THRESHOLDS['trade_balance_gdp']['warning']}% | 
+            Critical: above {THRESHOLDS['trade_balance_gdp']['critical']}%<br>
+            {THRESHOLDS['trade_balance_gdp']['context']}
+        </div>
+    </div>
+"""
+    
+    # 9. Empire Premium (VTI/VXUS P/B)
+    premium = data.get("empire_premium", {})
+    status = premium.get("status", "unknown")
+    
+    if premium.get("success"):
+        value_display = f"{premium.get('value')}x"
+        vti_pb = f"{premium.get('vti_pb', 'N/A')}"
+        vxus_pb = f"{premium.get('vxus_pb', 'N/A')}"
+        freshness = premium.get('data_freshness', 'Unknown')
+        source = premium.get('source', 'Yahoo Finance')
+        error_note = ""
+    else:
+        value_display = "N/A"
+        vti_pb = "N/A"
+        vxus_pb = "N/A"
+        freshness = "Unknown"
+        source = premium.get('source', 'Yahoo Finance')
+        error_note = f'<div class="error-note">Could not fetch data: {premium.get("error", "Unknown error")}</div>'
+    
+    html += f"""
+    <div class="indicator {status}">
+        <div class="indicator-title">
+            Empire Premium (US Valuation Spread)
+            <span class="status-label status-{status}">{status.upper()}</span>
+        </div>
+        <div class="indicator-value">{value_display}</div>
+        <div class="indicator-details">
+            <table>
+                <tr><td>VTI Price-to-Book</td><td>{vti_pb}</td></tr>
+                <tr><td>VXUS Price-to-Book</td><td>{vxus_pb}</td></tr>
+            </table>
+            <p style="font-size: 12px; color: #666;">Ratio of US to International valuations. Higher = US trading at larger premium.</p>
+            {error_note}
+        </div>
+        <div class="data-freshness">Data as of: {freshness} | Source: {source}</div>
+        <div class="threshold-note">
+            Warning: below {THRESHOLDS['empire_premium']['warning']}x | 
+            Critical: below {THRESHOLDS['empire_premium']['critical']}x<br>
+            {THRESHOLDS['empire_premium']['context']}
+        </div>
+    </div>
+"""
+    
+    # Market Context Section (Informational - Blue)
+    html += """
+    <h2>Market Context</h2>
+    <p style="font-size: 14px; color: #666; margin-bottom: 15px;">Informational metrics that provide context but don't trigger warnings.</p>
+"""
+    
+    # International vs US Performance (now informational/blue)
     perf = data.get("intl_vs_us", {})
-    status = perf.get("status", "unknown")
     
     if perf.get("success"):
         diff_3y = perf.get('diff_3y', 0) or 0
@@ -1052,10 +1377,10 @@ def generate_html_report(data):
         error_note = f'<div class="error-note">Could not fetch data: {perf.get("error", "Unknown error")}</div>'
     
     html += f"""
-    <div class="indicator {status}">
+    <div class="indicator info">
         <div class="indicator-title">
             International vs US Stocks (3-Year)
-            <span class="status-label status-{status}">{status.upper()}</span>
+            <span class="status-label status-info">CONTEXT</span>
         </div>
         <div class="indicator-value">{value_display}</div>
         <div class="indicator-details">
@@ -1070,9 +1395,7 @@ def generate_html_report(data):
         </div>
         <div class="data-freshness">Data as of: {freshness} | Source: {source}</div>
         <div class="threshold-note">
-            Warning: International ahead by {THRESHOLDS['intl_vs_us_3yr']['warning']}%+ | 
-            Critical: ahead by {THRESHOLDS['intl_vs_us_3yr']['critical']}%+<br>
-            {THRESHOLDS['intl_vs_us_3yr']['context']}
+            Positive = international outperforming. US has outperformed international for most of 2010-2024. Sustained reversal may signal dollar weakness or valuation normalization.
         </div>
     </div>
 """
@@ -1224,8 +1547,8 @@ def main():
         print(f"  Failed: {debt.get('error')}")
     data["debt_to_gdp"] = debt
     
-    # 6. Interest to Revenue
-    print("Fetching Interest/Revenue ratio (FRED - OMB fiscal year data)...")
+    # 6. Interest to Revenue (now quarterly)
+    print("Fetching Interest/Revenue ratio (FRED - quarterly BEA data)...")
     interest = fetch_interest_to_revenue()
     if interest.get("success"):
         interest["status"] = assess_status(interest.get("value"), "interest_to_revenue")
@@ -1235,17 +1558,50 @@ def main():
         print(f"  Failed: {interest.get('error')}")
     data["interest_to_revenue"] = interest
     
-    # 7. International vs US Performance
+    # 7. Interest to Defense
+    print("Fetching Interest/Defense ratio (FRED)...")
+    int_def = fetch_interest_to_defense()
+    if int_def.get("success"):
+        int_def["status"] = assess_status(int_def.get("value"), "interest_to_defense")
+        print(f"  Value: {int_def['value']}% - Status: {int_def['status']}")
+    else:
+        int_def["status"] = "unknown"
+        print(f"  Failed: {int_def.get('error')}")
+    data["interest_to_defense"] = int_def
+    
+    # 8. Trade Balance / GDP
+    print("Fetching Trade Balance/GDP ratio (FRED)...")
+    trade = fetch_trade_balance_gdp()
+    if trade.get("success"):
+        trade["status"] = assess_status(trade.get("value"), "trade_balance_gdp")
+        print(f"  Value: {trade['value']}% - Status: {trade['status']}")
+    else:
+        trade["status"] = "unknown"
+        print(f"  Failed: {trade.get('error')}")
+    data["trade_balance_gdp"] = trade
+    
+    # 9. Empire Premium (VTI/VXUS P/B)
+    print("Fetching Empire Premium (VTI/VXUS P/B)...")
+    premium = fetch_empire_premium()
+    if premium.get("success"):
+        premium["status"] = assess_status(premium.get("value"), "empire_premium")
+        print(f"  Value: {premium['value']}x - Status: {premium['status']}")
+    else:
+        premium["status"] = "unknown"
+        print(f"  Failed: {premium.get('error')}")
+    data["empire_premium"] = premium
+    
+    # 10. International vs US Performance (informational only)
     print("Fetching International vs US performance (VXUS vs VTI)...")
     perf = fetch_intl_vs_us_performance()
     if perf.get("success"):
-        perf["status"] = assess_status(perf.get("value"), "intl_vs_us_3yr")
+        perf["status"] = "info"  # Always info, not assessed
         print(f"  3yr diff: {perf.get('diff_3y')}% - Status: {perf['status']}")
     else:
         perf["status"] = "unknown"
         print(f"  Failed: {perf.get('error')}")
     data["intl_vs_us"] = perf
-    
+
     # Generate report
     print()
     print("Generating report...")

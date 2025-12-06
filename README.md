@@ -14,9 +14,11 @@ This tool tracks nine slow-moving structural indicators that might signal a shif
 | **Dollar Index (DXY)** | USD vs basket of 6 major currencies | <90 | <80 |
 | **US Debt-to-GDP** | Federal debt as percentage of GDP | >130% | >150% |
 | **Interest/Revenue Ratio** | Federal interest payments as % of revenue | >20% | >22% |
-| **Interest/Defense Ratio** | Interest payments vs defense spending ("Guns vs Debt") | >90% | >100% |
-| **Trade Balance/GDP** | Trade balance as % of GDP | >-1.5% | >-0.5% |
-| **Empire Premium** | VTI/VXUS Price-to-Book spread | <2.0x | <1.5x |
+| **Interest/Defense Ratio** | Interest payments vs defense spending ("Guns vs Debt") | >100% | >120% |
+| **Trade Balance/GDP** | Trade balance as % of GDP (deficit narrowing = concern) | >-1.5% | >-0.5% |
+| **Empire Premium** | VTI/VXUS Price-to-Book spread (US valuation premium) | <2.0x | <1.5x |
+
+Plus an informational "Market Context" section showing International vs US stock performance (not a warning trigger).
 
 Each indicator includes historical context for scale. For example, the DXY hit an all-time high of 164.7 in February 1985 and an all-time low of 70.7 in March 2008. Japan maintains ~260% debt-to-GDP but only pays ~8% of revenue to interest due to domestic ownership and near-zero rates, demonstrating that debt levels alone don't tell the whole story.
 
