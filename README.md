@@ -41,6 +41,12 @@ These are *decades-long* structural trends, not trading signals.
 
 The goal is to catch sustained trends, not react to noise.
 
+## Example Report
+
+Example Bretton Woods Decay Report (December 2025):
+
+![Bretton Woods Decay Report - December 2025](report-2025-12.png)
+
 ## Data Sources
 - **IMF COFER**: Currency Composition of Official Foreign Exchange Reserves (via DBnomics)
 - **Treasury TIC**: Treasury International Capital reporting
