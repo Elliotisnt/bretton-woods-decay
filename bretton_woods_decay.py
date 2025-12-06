@@ -383,19 +383,22 @@ def fetch_debt_to_gdp():
 
 def fetch_interest_to_revenue():
     """
-    Calculate interest payments as % of revenue using quarterly BEA data.
-    A091RC1Q027SBEA = Federal interest payments (quarterly SAAR, billions)
-    W006RC1Q027SBEA = Federal tax receipts (quarterly SAAR, billions)
+    Calculate interest payments as % of revenue using OMB fiscal year data.
+    FYOINT = Federal Outlays: Interest (fiscal year, millions)
+    FYFR = Federal Receipts (fiscal year, millions)
+    This matches Treasury's reported ~19% figure for FY2025.
     """
     try:
-        interest_url = "https://fred.stlouisfed.org/graph/fredgraph.csv?id=A091RC1Q027SBEA"
-        revenue_url = "https://fred.stlouisfed.org/graph/fredgraph.csv?id=W006RC1Q027SBEA"
+        # OMB fiscal year data (annual, updated each fiscal year)
+        interest_url = "https://fred.stlouisfed.org/graph/fredgraph.csv?id=FYOINT"
+        revenue_url = "https://fred.stlouisfed.org/graph/fredgraph.csv?id=FYFR"
         
         interest_resp = requests.get(interest_url, headers=HEADERS, timeout=30)
         revenue_resp = requests.get(revenue_url, headers=HEADERS, timeout=30)
         
         if interest_resp.status_code == 200 and revenue_resp.status_code == 200:
             def get_values(text):
+                """Get all values as list of (date, value) tuples."""
                 lines = text.strip().split('\n')
                 values = []
                 for line in lines[1:]:
@@ -408,29 +411,38 @@ def fetch_interest_to_revenue():
             revenue_vals = get_values(revenue_resp.text)
             
             if interest_vals and revenue_vals:
+                # Get latest values
                 interest_date, interest = interest_vals[-1]
                 revenue_date, revenue = revenue_vals[-1]
                 
+                # Calculate ratio
                 ratio = (interest / revenue) * 100
                 
-                # Historical context (4 quarters back = 1 year)
+                # Get historical values for context
                 year_ago_ratio = None
-                if len(interest_vals) >= 5 and len(revenue_vals) >= 5:
-                    year_ago_ratio = (interest_vals[-5][1] / revenue_vals[-5][1]) * 100
+                five_year_ratio = None
+                
+                if len(interest_vals) >= 2 and len(revenue_vals) >= 2:
+                    year_ago_ratio = (interest_vals[-2][1] / revenue_vals[-2][1]) * 100
+                
+                if len(interest_vals) >= 6 and len(revenue_vals) >= 6:
+                    five_year_ratio = (interest_vals[-6][1] / revenue_vals[-6][1]) * 100
                 
                 return {
                     "success": True,
                     "value": round(ratio, 1),
-                    "interest": round(interest, 1),
-                    "revenue": round(revenue, 1),
+                    "interest": round(interest / 1000, 1),  # Convert to billions
+                    "revenue": round(revenue / 1000, 1),    # Convert to billions
                     "date": interest_date,
-                    "data_freshness": interest_date,
-                    "source": "FRED (A091RC1Q027SBEA / W006RC1Q027SBEA)",
+                    "data_freshness": f"FY {interest_date[:4]}",
+                    "source": "FRED (FYOINT / FYFR)",
                     "year_ago": round(year_ago_ratio, 1) if year_ago_ratio else None,
-                    "change_1y": round(ratio - year_ago_ratio, 1) if year_ago_ratio else None
+                    "five_year_ago": round(five_year_ratio, 1) if five_year_ratio else None,
+                    "change_1y": round(ratio - year_ago_ratio, 1) if year_ago_ratio else None,
+                    "change_5y": round(ratio - five_year_ratio, 1) if five_year_ratio else None
                 }
         
-        return {"success": False, "error": "Could not fetch quarterly interest/revenue data", "source": "FRED"}
+        return {"success": False, "error": "Could not calculate interest/revenue ratio", "source": "FRED"}
     except Exception as e:
         return {"success": False, "error": str(e), "source": "FRED"}
 
