@@ -4,7 +4,7 @@ A quarterly macro indicator monitoring system that tracks structural changes in 
 
 ## What It Is
 
-This tool tracks seven slow-moving structural indicators that might signal a shift in dollar dominance:
+This tool tracks nine slow-moving structural indicators that might signal a shift in dollar dominance:
 
 | Indicator | What It Measures | Warning | Critical |
 |-----------|------------------|---------|----------|
@@ -13,8 +13,10 @@ This tool tracks seven slow-moving structural indicators that might signal a shi
 | **Japan Treasury Holdings** | Japan's holdings of US Treasury securities | <$1000B | <$850B |
 | **Dollar Index (DXY)** | USD vs basket of 6 major currencies | <90 | <80 |
 | **US Debt-to-GDP** | Federal debt as percentage of GDP | >130% | >150% |
-| **Interest/Revenue Ratio** | Federal interest payments as % of revenue | >20% | >25% |
-| **International equity outperformance (3yr rolling)** | International equity outperformance | +15% | +30% |
+| **Interest/Revenue Ratio** | Federal interest payments as % of revenue | >20% | >22% |
+| **Interest/Defense Ratio** | Interest payments vs defense spending ("Guns vs Debt") | >90% | >100% |
+| **Trade Balance/GDP** | Trade balance as % of GDP | >-1.5% | >-0.5% |
+| **Empire Premium** | VTI/VXUS Price-to-Book spread | <2.0x | <1.5x |
 
 Each indicator includes historical context for scale. For example, the DXY hit an all-time high of 164.7 in February 1985 and an all-time low of 70.7 in March 2008. Japan maintains ~260% debt-to-GDP but only pays ~8% of revenue to interest due to domestic ownership and near-zero rates, demonstrating that debt levels alone don't tell the whole story.
 
@@ -39,11 +41,16 @@ These are *decades-long* structural trends, not trading signals.
 The goal is to catch sustained trends, not react to noise.
 
 ## Data Sources
-
 - **IMF COFER**: Currency Composition of Official Foreign Exchange Reserves (via DBnomics)
 - **Treasury TIC**: Treasury International Capital reporting
-- **FRED**: Federal Reserve Economic Data (OMB fiscal year series for interest/revenue)
-- **Yahoo Finance**: DXY and ETF data (VXUS vs VTI as proxies for FTIHX/FXAIX)
+- **FRED**: Federal Reserve Economic Data
+  - GFDEGDQ188S (Debt-to-GDP)
+  - A091RC1Q027SBEA (Interest payments, quarterly SAAR)
+  - W006RC1Q027SBEA (Tax receipts, quarterly SAAR)
+  - FDEFX (Defense spending, quarterly SAAR)
+  - BOPGSTB (Trade balance, monthly)
+  - GDP (Gross Domestic Product, quarterly)
+- **Yahoo Finance**: DXY, VTI/VXUS Price-to-Book ratios, performance history
 
 ## Disclaimer
 
