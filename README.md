@@ -2,6 +2,8 @@
 
 A quarterly macro indicator monitoring system that tracks structural changes in US dollar hegemony.
 
+A quarterly macro indicator monitoring system that tracks structural changes in US dollar hegemony. Focused on empire decline rather than market crashes. Indicators are lagging, but give more signal than my noisy twitter feed. Will use for consideration of shifting retirement composition from FXAIX to FTIHX.
+
 ## What It Is
 
 This tool tracks seven slow-moving structural indicators that might signal a shift in dollar dominance:
@@ -16,16 +18,16 @@ This tool tracks seven slow-moving structural indicators that might signal a shi
 | **Interest/Revenue Ratio** | Federal interest payments as % of revenue | >20% | >25% |
 | **Intl vs US Stocks (3yr)** | International equity outperformance | +15% | +30% |
 
-Each indicator includes historical context for scale. For example, the DXY hit an all-time high of 164.7 in February 1985 and an all-time low of 70.7 in March 2008. Japan maintains ~260% debt-to-GDP but only pays ~8% of revenue to interest due to domestic ownership and near-zero rates—demonstrating that debt levels alone don't tell the whole story.
+Each indicator includes historical context for scale. For example, the DXY hit an all-time high of 164.7 in February 1985 and an all-time low of 70.7 in March 2008. Japan maintains ~260% debt-to-GDP but only pays ~8% of revenue to interest due to domestic ownership and near-zero rates, demonstrating that debt levels alone don't tell the whole story.
 
 ## Why I Made It
 
-Long-term retirement allocation decisions (like whether to hold 65/35 or 50/50 domestic/international) shouldn't be made based on short-term market noise. But they also shouldn't ignore structural shifts in the global monetary system.
+I've got a (hopefully) long life ahead of me, and I started my retirement early and put 30% of my income into it. I'm deeply suspicious of the longevity of the American empire, but I don't want to miss out on long-term gains while the market is still performant. The US has been in decline / stagflation since post-Vietnam war, but had I pulled out of S&P 500 then I would've missed out on 75,000% percent growth. I want to try to make good long-term retirement allocation decisions (like whether to hold 65/35 or 50/50 domestic/international), and these decisions shouldn't be made based on short-term market noise. I also don't want to ignore structural shifts in the global monetary system, hence these quarterly emails. Was first inspired to switch to 65/35 by this video by Hank Green, https://youtu.be/VZMFp-mEWoM.
 
 This tool sends me a quarterly email with these indicators so I can:
-- Notice sustained trends over multiple reports
+- Keep tabs on sustained trends over multiple reports
 - Have data-driven context for allocation decisions
-- Avoid the temptation to check obsessively
+- And most importantly, avoid the temptation to check obsessively
 
 These are *decades-long* structural trends, not trading signals.
 
@@ -47,4 +49,4 @@ The goal is to catch sustained trends, not react to noise.
 
 ## Disclaimer
 
-This is informational only, not financial advice.
+This is financial advice and you can hold me, Elliot Allen, legally culpable.
