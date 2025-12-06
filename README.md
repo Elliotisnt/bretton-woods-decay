@@ -1,6 +1,6 @@
 # Bretton Woods Decay Monitor
 
-A quarterly macro indicator monitoring system that tracks structural changes in US dollar hegemony. Focused on empire decline rather than market crashes. Indicators are lagging, but give more signal than my noisy twitter feed. Will use for consideration of shifting retirement composition from FXAIX to FTIHX.
+A quarterly macro indicator monitoring system that tracks structural changes in US dollar hegemony. Focused on empire decline rather than market crashes. Indicators are lagging, but give more signal than my noisy twitter feed. I will use it for consideration of shifting retirement composition from FXAIX to FTIHX.
 
 ## What It Is
 
@@ -20,7 +20,7 @@ Each indicator includes historical context for scale. For example, the DXY hit a
 
 ## Why I Made It
 
-I've got a (hopefully) long life ahead of me, and I started my retirement early and put 30% of my income into it. I'm deeply suspicious of the longevity of the American empire, but I don't want to miss out on long-term gains while the market is still performant. The US has shown signs of relative decline since the end of Bretton Woods in 1971, but had I pulled out of the S&P 500 then, I would've missed out on 34,000% growth! The empire can be weakening structurally while the market keeps coasting along. I want to try to make good long-term retirement allocation decisions (like whether to hold 65/35 or 50/50 domestic/international), and these decisions shouldn't be made based on short-term market noise. I also don't want to ignore structural shifts in the global monetary system, hence these quarterly emails. Was first inspired to switch to 65/35 by this video by Hank Green, https://youtu.be/VZMFp-mEWoM.
+I've got a (hopefully) long life ahead of me, and I started my retirement early and put 30% of my income into it. I'm deeply suspicious of the longevity of the American empire, but I don't want to miss out on long-term gains while the market is still performant. The US has shown signs of relative decline since the end of Bretton Woods in 1971, but had I pulled out of the S&P 500 then, I would've missed out on 34,000% growth! The empire can be weakening structurally while the market keeps coasting along. I want to try to make good long-term retirement allocation decisions (like whether to hold 65/35 or 50/50 domestic/international), and these decisions shouldn't be made based on short-term market noise. I also don't want to ignore structural shifts in the global monetary system, hence these quarterly emails. I'm aware that there's a chance nothing really changes before I die of natural causes. Was first inspired to switch to 65/35 by this video by Hank Green, https://youtu.be/VZMFp-mEWoM.
 
 This tool sends me a quarterly email with these indicators so I can:
 - Keep tabs on sustained trends over multiple reports
