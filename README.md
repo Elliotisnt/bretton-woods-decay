@@ -1,85 +1,50 @@
 # Bretton Woods Decay Monitor
 
-Semi-annual macro indicator emails to keep tabs on the slow decline of the US financial system and the dollar. Focused on empire decline rather than market crashes. Indicators are lagging, but give more signal than my noisy twitter feed. Will use for consideration of shifting retirement composition from FXAIX to FTIHX.
+A quarterly macro indicator monitoring system that tracks structural changes in US dollar hegemony.
 
-## Purpose
+## What It Is
 
-This tool tracks slow-moving structural indicators that might signal a shift in dollar dominance and help inform long-term retirement allocation decisions (e.g., shifting from 65/35 to 50/50 domestic/international).
+This tool tracks seven slow-moving structural indicators that might signal a shift in dollar dominance:
 
-**Important:** This monitors *decades-long structural trends*, not short-term market movements.
+| Indicator | What It Measures | Warning | Critical |
+|-----------|------------------|---------|----------|
+| **USD Share of Global Reserves** | Percentage of global FX reserves held in USD | <55% | <50% |
+| **China Treasury Holdings** | China's holdings of US Treasury securities | <$700B | <$500B |
+| **Japan Treasury Holdings** | Japan's holdings of US Treasury securities | <$1000B | <$850B |
+| **Dollar Index (DXY)** | USD vs basket of 6 major currencies | <90 | <80 |
+| **US Debt-to-GDP** | Federal debt as percentage of GDP | >130% | >150% |
+| **Interest/Revenue Ratio** | Federal interest payments as % of revenue | >20% | >25% |
+| **Intl vs US Stocks (3yr)** | International equity outperformance | +15% | +30% |
 
-## Indicators Tracked
+Each indicator includes historical context for scale. For example, the DXY hit an all-time high of 164.7 in February 1985 and an all-time low of 70.7 in March 2008. Japan maintains ~260% debt-to-GDP but only pays ~8% of revenue to interest due to domestic ownership and near-zero rates—demonstrating that debt levels alone don't tell the whole story.
 
-| Indicator | Source | Warning | Critical |
-|-----------|--------|---------|----------|
-| USD Share of Global Reserves | IMF COFER (via DBnomics) | <55% | <50% |
-| China Treasury Holdings | Treasury TIC | <$700B | <$500B |
-| Japan Treasury Holdings | Treasury TIC | <$1000B | <$850B |
-| Dollar Index (DXY) | Yahoo Finance | <95 | <85 |
-| US Debt-to-GDP | FRED | >130% | >150% |
-| Interest/Revenue Ratio | FRED | >25% | >33% |
-| International vs US Stocks (3yr) | Yahoo Finance | +15% | +30% |
+## Why I Made It
 
-## Setup
+Long-term retirement allocation decisions (like whether to hold 65/35 or 50/50 domestic/international) shouldn't be made based on short-term market noise. But they also shouldn't ignore structural shifts in the global monetary system.
 
-### 1. Create GitHub Repository
+This tool sends me a quarterly email with these indicators so I can:
+- Notice sustained trends over multiple reports
+- Have data-driven context for allocation decisions
+- Avoid the temptation to check obsessively
 
-Create a new repository (can be public or private).
+These are *decades-long* structural trends, not trading signals.
 
-### 2. Add Files
+## How I Use It
 
-Upload:
-- `bretton_woods_decay.py` 
-- `.github/workflows/bretton_woods_decay.yml`
+- **All stable**: No action. Check next quarter.
+- **1-2 warnings**: Note it, but don't react to a single report.
+- **Warnings for 2-3 consecutive reports**: Consider shifting from 65/35 → 50/50.
+- **Multiple critical signals**: More aggressive rebalancing may be warranted.
 
-### 3. Configure Secrets
-
-Go to **Settings → Secrets and variables → Actions** and add:
-
-| Secret | Description |
-|--------|-------------|
-| `ICLOUD_EMAIL` | Your iCloud email (sender) |
-| `ICLOUD_PASSWORD` | App-specific password (see below) |
-| `TO_EMAIL` | Recipient email (optional, defaults to sender) |
-
-#### Getting an App-Specific Password
-
-1. Go to [appleid.apple.com](https://appleid.apple.com)
-2. Sign in → Security → App-Specific Passwords
-3. Click "Generate" and name it (e.g., "Bretton Woods")
-4. Copy the generated password
-
-### 4. Test
-
-Go to **Actions → Bretton Woods Decay Report → Run workflow** to test manually.
-
-## Schedule
-
-Runs automatically on:
-- January 15 at 9 AM Eastern
-- July 15 at 9 AM Eastern
+The goal is to catch sustained trends, not react to noise.
 
 ## Data Sources
 
-- **IMF COFER**: Currency Composition of Official Foreign Exchange Reserves (via DBnomics mirror)
-- **Treasury TIC**: Treasury International Capital reporting (ticdata.treasury.gov)
-- **FRED**: Federal Reserve Economic Data
-- **Yahoo Finance**: Market data for DXY and ETFs
-
-## ETF Proxies
-
-- **VTI** (Vanguard Total US Stock Market) ≈ FXAIX (Fidelity 500 Index)
-- **VXUS** (Vanguard Total International Stock, **excludes US**) ≈ FTIHX (Fidelity Total International)
-
-These are good proxies for comparing US vs international performance. VXUS explicitly excludes US stocks, giving a clean comparison.
-
-## Decision Framework
-
-- **All stable**: No action. Check in 6 months.
-- **1-2 warnings**: Note but don't react to single report.
-- **Warnings 2-3 consecutive reports**: Consider shifting 65/35 → 50/50.
-- **Multiple critical signals**: More aggressive rebalancing may be warranted.
+- **IMF COFER**: Currency Composition of Official Foreign Exchange Reserves (via DBnomics)
+- **Treasury TIC**: Treasury International Capital reporting
+- **FRED**: Federal Reserve Economic Data (OMB fiscal year series for interest/revenue)
+- **Yahoo Finance**: DXY and ETF data (VXUS vs VTI)
 
 ## Disclaimer
 
-This is informational only and not financial advice. These are structural macro indicators, not trading signals.
+This is informational only, not financial advice.

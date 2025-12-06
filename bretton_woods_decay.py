@@ -1,6 +1,6 @@
 """
-Bretton Woods Decay - Semi-Annual Macro Indicator Monitor
-=========================================================
+Bretton Woods Decay - Quarterly Macro Indicator Monitor
+========================================================
 Tracks key indicators of US dollar/empire structural health:
 
 1. USD share of global foreign exchange reserves (IMF COFER via DBnomics)
@@ -8,10 +8,10 @@ Tracks key indicators of US dollar/empire structural health:
 3. Japan holdings of US Treasuries (Treasury TIC)
 4. DXY Dollar Index (Yahoo Finance)
 5. US Debt-to-GDP ratio (FRED)
-6. Federal interest payments as % of revenue (FRED)
+6. Federal interest payments as % of revenue (FRED - OMB fiscal year data)
 7. International vs US stock performance (VXUS vs VTI)
 
-Designed to run twice yearly (January and July) via GitHub Actions.
+Designed to run quarterly (Jan, Apr, Jul, Oct) via GitHub Actions.
 Sends a formatted email report via iCloud SMTP.
 """
 
@@ -32,7 +32,7 @@ ICLOUD_PASSWORD = os.environ.get("ICLOUD_PASSWORD")
 TO_EMAIL = os.environ.get("TO_EMAIL", ICLOUD_EMAIL)
 
 HEADERS = {
-    "User-Agent": "BrettonWoodsDecay/2.0 (github.com/bretton-woods-decay)",
+    "User-Agent": "BrettonWoodsDecay/3.0 (github.com/bretton-woods-decay)",
     "Accept": "application/json"
 }
 
@@ -43,65 +43,58 @@ THRESHOLDS = {
     "usd_reserve_share": {
         "warning": 55.0,
         "critical": 50.0,
-        "severe": 45.0,
         "direction": "below",
         "unit": "%",
         "description": "USD share of global FX reserves",
-        "context": "Peaked at 71% (2000). Currently ~57%. Below 50% = serious dedollarization. Below 45% = unprecedented shift."
+        "context": "Peaked at 71% in 2000. Declined to ~58% by 2024. Below 50% would be unprecedented since tracking began in 1999."
     },
     "china_treasury": {
         "warning": 700.0,
         "critical": 500.0,
-        "severe": 300.0,
         "direction": "below",
         "unit": "B",
         "description": "China holdings of US Treasuries",
-        "context": "Peaked at $1.3T (2013). Below $500B = aggressive divestment. Below $300B = near-complete exit."
+        "context": "Peaked at $1.32T in Nov 2013. Has been steadily declining since 2018. Below $500B would signal aggressive divestment."
     },
     "japan_treasury": {
         "warning": 1000.0,
         "critical": 850.0,
-        "severe": 700.0,
         "direction": "below",
         "unit": "B",
         "description": "Japan holdings of US Treasuries",
-        "context": "Largest foreign holder. Below $850B = unusual selling. Below $700B = currency crisis or policy shift."
+        "context": "Largest foreign holder. Peaked at $1.29T in Nov 2021. Selling often reflects yen defense rather than dedollarization."
     },
     "dxy": {
-        "warning": 95.0,
-        "critical": 85.0,
-        "severe": 75.0,
+        "warning": 90.0,
+        "critical": 80.0,
         "direction": "below",
         "unit": "",
         "description": "Dollar Index (DXY)",
-        "context": "Measures USD vs 6 currencies (EUR 57.6%, JPY 13.6%, GBP 11.9%, CAD 9.1%, SEK 4.2%, CHF 3.6%). Below 75 = multi-decade low."
+        "context": "Created 1973 at 100. All-time high: 164.7 (Feb 1985). All-time low: 70.7 (Mar 2008). Measures USD vs EUR (57.6%), JPY (13.6%), GBP (11.9%), CAD (9.1%), SEK (4.2%), CHF (3.6%)."
     },
     "debt_to_gdp": {
         "warning": 130.0,
         "critical": 150.0,
-        "severe": 180.0,
         "direction": "above",
         "unit": "%",
         "description": "US Federal Debt to GDP ratio",
-        "context": "Was 55% (2000), 100% (2012), now ~120%. Above 150% = Japan-level debt. Above 180% = uncharted territory."
+        "context": "Was 55% in 2000, crossed 100% in 2013, peaked at 126% in 2020. For comparison: Japan ~260%, Italy ~140%, UK ~100%, Germany ~65%."
     },
     "interest_to_revenue": {
-        "warning": 25.0,
-        "critical": 33.0,
-        "severe": 50.0,
+        "warning": 20.0,
+        "critical": 25.0,
         "direction": "above",
         "unit": "%",
         "description": "Federal interest payments as % of revenue",
-        "context": "At 33% = 1/3 of tax revenue to interest. At 50% = half of revenue to interest (debt spiral territory)."
+        "context": "Previous peak was ~18% in 1991. Fell to ~6% by 2015 due to low rates. Japan at ~260% debt/GDP only pays ~8% of revenue to interest due to BoJ ownership and near-zero rates."
     },
     "intl_vs_us_3yr": {
         "warning": 15.0,
         "critical": 30.0,
-        "severe": 50.0,
         "direction": "above",
         "unit": "%",
         "description": "International vs US stocks (3-year cumulative)",
-        "context": "Positive = international outperforming. Above 30% = major regime change. Above 50% = potential secular shift."
+        "context": "Positive = international outperforming. US has outperformed international for most of 2010-2024. Sustained reversal may signal dollar weakness or valuation normalization."
     }
 }
 
@@ -370,41 +363,63 @@ def fetch_debt_to_gdp():
 
 def fetch_interest_to_revenue():
     """
-    Calculate interest payments as % of revenue.
-    Uses two FRED series and calculates the ratio.
+    Calculate interest payments as % of revenue using OMB fiscal year data.
+    FYOINT = Federal Outlays: Interest (fiscal year, millions)
+    FYFR = Federal Receipts (fiscal year, millions)
+    This matches Treasury's reported ~19% figure for FY2025.
     """
     try:
-        # A091RC1Q027SBEA = Federal government interest payments (quarterly, billions)
-        # W006RC1Q027SBEA = Federal government current receipts (quarterly, billions)
-        
-        interest_url = "https://fred.stlouisfed.org/graph/fredgraph.csv?id=A091RC1Q027SBEA"
-        revenue_url = "https://fred.stlouisfed.org/graph/fredgraph.csv?id=W006RC1Q027SBEA"
+        # OMB fiscal year data (annual, updated each fiscal year)
+        interest_url = "https://fred.stlouisfed.org/graph/fredgraph.csv?id=FYOINT"
+        revenue_url = "https://fred.stlouisfed.org/graph/fredgraph.csv?id=FYFR"
         
         interest_resp = requests.get(interest_url, headers=HEADERS, timeout=30)
         revenue_resp = requests.get(revenue_url, headers=HEADERS, timeout=30)
         
         if interest_resp.status_code == 200 and revenue_resp.status_code == 200:
-            def get_latest(text):
+            def get_values(text):
+                """Get all values as list of (date, value) tuples."""
                 lines = text.strip().split('\n')
-                for line in reversed(lines[1:]):
+                values = []
+                for line in lines[1:]:
                     parts = line.split(',')
                     if len(parts) >= 2 and parts[1].strip() and parts[1] != '.':
-                        return float(parts[1]), parts[0]
-                return None, None
+                        values.append((parts[0], float(parts[1])))
+                return values
             
-            interest, i_date = get_latest(interest_resp.text)
-            revenue, r_date = get_latest(revenue_resp.text)
+            interest_vals = get_values(interest_resp.text)
+            revenue_vals = get_values(revenue_resp.text)
             
-            if interest and revenue:
+            if interest_vals and revenue_vals:
+                # Get latest values
+                interest_date, interest = interest_vals[-1]
+                revenue_date, revenue = revenue_vals[-1]
+                
+                # Calculate ratio
                 ratio = (interest / revenue) * 100
+                
+                # Get historical values for context
+                year_ago_ratio = None
+                five_year_ratio = None
+                
+                if len(interest_vals) >= 2 and len(revenue_vals) >= 2:
+                    year_ago_ratio = (interest_vals[-2][1] / revenue_vals[-2][1]) * 100
+                
+                if len(interest_vals) >= 6 and len(revenue_vals) >= 6:
+                    five_year_ratio = (interest_vals[-6][1] / revenue_vals[-6][1]) * 100
+                
                 return {
                     "success": True,
                     "value": round(ratio, 1),
-                    "interest": round(interest, 1),
-                    "revenue": round(revenue, 1),
-                    "date": i_date,
-                    "data_freshness": i_date,
-                    "source": "FRED (A091RC1Q027SBEA / W006RC1Q027SBEA)"
+                    "interest": round(interest / 1000, 1),  # Convert to billions
+                    "revenue": round(revenue / 1000, 1),    # Convert to billions
+                    "date": interest_date,
+                    "data_freshness": f"FY {interest_date[:4]}",
+                    "source": "FRED (FYOINT / FYFR)",
+                    "year_ago": round(year_ago_ratio, 1) if year_ago_ratio else None,
+                    "five_year_ago": round(five_year_ratio, 1) if five_year_ratio else None,
+                    "change_1y": round(ratio - year_ago_ratio, 1) if year_ago_ratio else None,
+                    "change_5y": round(ratio - five_year_ratio, 1) if five_year_ratio else None
                 }
         
         return {"success": False, "error": "Could not calculate interest/revenue ratio", "source": "FRED"}
@@ -444,6 +459,10 @@ def fetch_dxy():
                 three_year_ago = valid_data[-756][1] if len(valid_data) > 756 else None
                 three_year_date = datetime.fromtimestamp(valid_data[-756][0]).strftime("%Y-%m-%d") if len(valid_data) > 756 else None
                 
+                # Calculate percentage changes
+                change_1y_pct = ((current - year_ago) / year_ago * 100) if year_ago else None
+                change_3y_pct = ((current - three_year_ago) / three_year_ago * 100) if three_year_ago else None
+                
                 return {
                     "success": True,
                     "value": round(current, 2),
@@ -453,8 +472,8 @@ def fetch_dxy():
                     "year_ago_date": year_ago_date,
                     "three_year_ago": round(three_year_ago, 2) if three_year_ago else None,
                     "three_year_date": three_year_date,
-                    "change_1y": round(current - year_ago, 2) if year_ago else None,
-                    "change_3y": round(current - three_year_ago, 2) if three_year_ago else None,
+                    "change_1y": round(change_1y_pct, 1) if change_1y_pct else None,
+                    "change_3y": round(change_3y_pct, 1) if change_3y_pct else None,
                     "source": "Yahoo Finance (DX-Y.NYB)"
                 }
         
@@ -560,7 +579,7 @@ def assess_status(value, threshold_key):
             return "stable"
 
 
-def format_change(value, unit=""):
+def format_change(value, unit="%"):
     """Format a change value with + or - sign."""
     if value is None:
         return "N/A"
@@ -586,25 +605,41 @@ def generate_html_report(data):
     
     # Collect all statuses (only from successful fetches)
     statuses = []
+    status_counts = {"stable": 0, "warning": 0, "critical": 0, "unknown": 0}
+    total_metrics = 7
+    
     for key in data:
         if isinstance(data[key], dict) and "status" in data[key]:
-            if data[key].get("success", False) or data[key].get("status") != "unknown":
-                statuses.append(data[key]["status"])
+            status = data[key].get("status", "unknown")
+            if data[key].get("success", False) or status != "unknown":
+                statuses.append(status)
+                status_counts[status] = status_counts.get(status, 0) + 1
     
-    # Determine overall status
-    known_statuses = [s for s in statuses if s != "unknown"]
-    if "critical" in known_statuses:
-        overall = "CRITICAL - Review your allocation"
-        overall_color = "#dc3545"
-    elif "warning" in known_statuses:
-        overall = "WARNING - Monitor closely"
-        overall_color = "#e67e22"
-    elif known_statuses:
-        overall = "STABLE - No immediate concerns"
-        overall_color = "#27ae60"
+    # Determine overall status and create summary
+    warning_count = status_counts.get("warning", 0)
+    critical_count = status_counts.get("critical", 0)
+    successful_count = len([s for s in statuses if s != "unknown"])
+    
+    if critical_count > 0:
+        overall_color = "#dc3545"  # Red
+        if critical_count == 1 and warning_count == 0:
+            overall_summary = f"1 critical out of {successful_count} metrics"
+        elif critical_count == 1:
+            overall_summary = f"1 critical, {warning_count} warning out of {successful_count} metrics"
+        else:
+            overall_summary = f"{critical_count} critical, {warning_count} warning out of {successful_count} metrics"
+    elif warning_count > 0:
+        overall_color = "#e67e22"  # Amber/Orange
+        if warning_count == 1:
+            overall_summary = f"1 warning out of {successful_count} metrics"
+        else:
+            overall_summary = f"{warning_count} warnings out of {successful_count} metrics"
+    elif successful_count > 0:
+        overall_color = "#27ae60"  # Green
+        overall_summary = f"All {successful_count} metrics stable"
     else:
-        overall = "UNKNOWN - Data unavailable"
-        overall_color = "#95a5a6"
+        overall_color = "#95a5a6"  # Gray
+        overall_summary = "Data unavailable"
     
     html = f"""
 <!DOCTYPE html>
@@ -636,6 +671,10 @@ def generate_html_report(data):
             padding: 15px; 
             border-radius: 6px; 
             margin: 20px 0;
+            font-size: 16px;
+        }}
+        .overall-status strong {{
+            font-size: 18px;
         }}
         .indicator {{ 
             background: #f8f9fa; 
@@ -717,7 +756,7 @@ def generate_html_report(data):
     <p>Report Date: {today}</p>
     
     <div class="overall-status">
-        <strong>Overall Assessment:</strong> {overall}
+        <strong>Status:</strong> {overall_summary}
     </div>
 """
     
@@ -728,8 +767,8 @@ def generate_html_report(data):
     if cofer.get("success"):
         value_display = f"{cofer.get('value')}%"
         period_display = cofer.get('period', 'N/A')
-        change_1y = format_change(cofer.get('change_1y'), ' pp')
-        change_5y = format_change(cofer.get('change_5y'), ' pp')
+        change_1y = format_change(cofer.get('change_1y'), '%')
+        change_5y = format_change(cofer.get('change_5y'), '%')
         freshness = cofer.get('data_freshness', 'Unknown')
         source = cofer.get('source', 'IMF COFER')
         error_note = ""
@@ -760,8 +799,7 @@ def generate_html_report(data):
         <div class="data-freshness">Data as of: {freshness} | Source: {source}</div>
         <div class="threshold-note">
             Warning: below {THRESHOLDS['usd_reserve_share']['warning']}% | 
-            Critical: below {THRESHOLDS['usd_reserve_share']['critical']}% |
-            Severe: below {THRESHOLDS['usd_reserve_share']['severe']}%<br>
+            Critical: below {THRESHOLDS['usd_reserve_share']['critical']}%<br>
             {THRESHOLDS['usd_reserve_share']['context']}
         </div>
     </div>
@@ -806,8 +844,7 @@ def generate_html_report(data):
         <div class="data-freshness">Data as of: {freshness} | Source: {source}</div>
         <div class="threshold-note">
             Warning: below ${THRESHOLDS['china_treasury']['warning']}B | 
-            Critical: below ${THRESHOLDS['china_treasury']['critical']}B |
-            Severe: below ${THRESHOLDS['china_treasury']['severe']}B<br>
+            Critical: below ${THRESHOLDS['china_treasury']['critical']}B<br>
             {THRESHOLDS['china_treasury']['context']}
         </div>
     </div>
@@ -852,8 +889,7 @@ def generate_html_report(data):
         <div class="data-freshness">Data as of: {freshness} | Source: {source}</div>
         <div class="threshold-note">
             Warning: below ${THRESHOLDS['japan_treasury']['warning']}B | 
-            Critical: below ${THRESHOLDS['japan_treasury']['critical']}B |
-            Severe: below ${THRESHOLDS['japan_treasury']['severe']}B<br>
+            Critical: below ${THRESHOLDS['japan_treasury']['critical']}B<br>
             {THRESHOLDS['japan_treasury']['context']}
         </div>
     </div>
@@ -865,8 +901,8 @@ def generate_html_report(data):
     
     if dxy.get("success"):
         value_display = f"{dxy.get('value')}"
-        change_1y = format_change(dxy.get('change_1y'))
-        change_3y = format_change(dxy.get('change_3y'))
+        change_1y = format_change(dxy.get('change_1y'), '%')
+        change_3y = format_change(dxy.get('change_3y'), '%')
         year_ago_display = f"{dxy.get('year_ago', 'N/A')} ({dxy.get('year_ago_date', 'N/A')})"
         freshness = dxy.get('data_freshness', 'Unknown')
         source = dxy.get('source', 'Yahoo Finance')
@@ -937,8 +973,7 @@ def generate_html_report(data):
         <div class="data-freshness">Data as of: {freshness} | Source: {source}</div>
         <div class="threshold-note">
             Warning: above {THRESHOLDS['debt_to_gdp']['warning']}% | 
-            Critical: above {THRESHOLDS['debt_to_gdp']['critical']}% |
-            Severe: above {THRESHOLDS['debt_to_gdp']['severe']}%<br>
+            Critical: above {THRESHOLDS['debt_to_gdp']['critical']}%<br>
             {THRESHOLDS['debt_to_gdp']['context']}
         </div>
     </div>
@@ -953,6 +988,7 @@ def generate_html_report(data):
         date_display = interest.get('date', 'N/A')
         interest_amt = f"${interest.get('interest', 'N/A')}B"
         revenue_amt = f"${interest.get('revenue', 'N/A')}B"
+        change_1y = format_change(interest.get('change_1y'), '%') if interest.get('change_1y') else "N/A"
         freshness = interest.get('data_freshness', 'Unknown')
         source = interest.get('source', 'FRED')
         error_note = ""
@@ -961,6 +997,7 @@ def generate_html_report(data):
         date_display = "N/A"
         interest_amt = "N/A"
         revenue_amt = "N/A"
+        change_1y = "N/A"
         freshness = "Unknown"
         source = interest.get('source', 'FRED')
         error_note = f'<div class="error-note">Could not fetch data: {interest.get("error", "Unknown error")}</div>'
@@ -974,17 +1011,17 @@ def generate_html_report(data):
         <div class="indicator-value">{value_display}</div>
         <div class="indicator-details">
             <table>
-                <tr><td>Quarterly interest payments</td><td>{interest_amt}</td></tr>
-                <tr><td>Quarterly revenue</td><td>{revenue_amt}</td></tr>
-                <tr><td>As of</td><td>{date_display}</td></tr>
+                <tr><td>Annual interest payments</td><td>{interest_amt}</td></tr>
+                <tr><td>Annual federal revenue</td><td>{revenue_amt}</td></tr>
+                <tr><td>1-year change</td><td>{change_1y}</td></tr>
+                <tr><td>Fiscal year</td><td>{date_display}</td></tr>
             </table>
             {error_note}
         </div>
         <div class="data-freshness">Data as of: {freshness} | Source: {source}</div>
         <div class="threshold-note">
             Warning: above {THRESHOLDS['interest_to_revenue']['warning']}% | 
-            Critical: above {THRESHOLDS['interest_to_revenue']['critical']}% |
-            Severe: above {THRESHOLDS['interest_to_revenue']['severe']}%<br>
+            Critical: above {THRESHOLDS['interest_to_revenue']['critical']}%<br>
             {THRESHOLDS['interest_to_revenue']['context']}
         </div>
     </div>
@@ -1046,7 +1083,7 @@ def generate_html_report(data):
     <div class="indicator stable">
         <p><strong>What to do with this information:</strong></p>
         <ul>
-            <li><strong>All stable:</strong> No action needed. Check back in 6 months.</li>
+            <li><strong>All stable:</strong> No action needed. Check back next quarter.</li>
             <li><strong>1-2 warnings:</strong> Note it, but don't react to a single report. Watch for trends across multiple reports.</li>
             <li><strong>Warnings for 2-3 consecutive reports:</strong> Consider gradually shifting from 65/35 to 50/50 domestic/international.</li>
             <li><strong>Multiple critical signals:</strong> More aggressive rebalancing toward international may be warranted.</li>
@@ -1055,15 +1092,28 @@ def generate_html_report(data):
     </div>
 """
     
-    # Footer
-    next_month = "July" if datetime.now().month <= 6 else "January"
-    next_year = datetime.now().year if datetime.now().month <= 6 else datetime.now().year + 1
+    # Footer - Calculate next report month
+    current_month = datetime.now().month
+    current_year = datetime.now().year
+    
+    # Quarterly schedule: Jan, Apr, Jul, Oct
+    quarterly_months = [1, 4, 7, 10]
+    next_quarter_months = [m for m in quarterly_months if m > current_month]
+    
+    if next_quarter_months:
+        next_month_num = next_quarter_months[0]
+        next_year = current_year
+    else:
+        next_month_num = quarterly_months[0]  # January
+        next_year = current_year + 1
+    
+    next_month_name = datetime(2000, next_month_num, 1).strftime('%B')
     
     html += f"""
     <div class="footer">
-        <p>Generated by Bretton Woods Decay v2.1<br>
+        <p>Generated by Bretton Woods Decay v3.0<br>
         This is informational only, not financial advice.<br>
-        Next scheduled report: {next_month} {next_year}</p>
+        Next scheduled report: {next_month_name} {next_year}</p>
     </div>
 </body>
 </html>
@@ -1105,7 +1155,7 @@ def send_email_icloud(subject, body_html):
 
 def main():
     print("=" * 60)
-    print("Bretton Woods Decay - Semi-Annual Report")
+    print("Bretton Woods Decay - Quarterly Report")
     print("=" * 60)
     print(f"Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print()
@@ -1175,7 +1225,7 @@ def main():
     data["debt_to_gdp"] = debt
     
     # 6. Interest to Revenue
-    print("Fetching Interest/Revenue ratio (FRED)...")
+    print("Fetching Interest/Revenue ratio (FRED - OMB fiscal year data)...")
     interest = fetch_interest_to_revenue()
     if interest.get("success"):
         interest["status"] = assess_status(interest.get("value"), "interest_to_revenue")
@@ -1212,12 +1262,15 @@ def main():
         if isinstance(d, dict) and d.get("success", False):
             statuses.append(d.get("status", "unknown"))
     
-    if "critical" in statuses:
-        subject = f"Bretton Woods Decay: CRITICAL - {datetime.now().strftime('%B %Y')}"
-    elif "warning" in statuses:
-        subject = f"Bretton Woods Decay: Warning - {datetime.now().strftime('%B %Y')}"
+    warning_count = statuses.count("warning")
+    critical_count = statuses.count("critical")
+    
+    if critical_count > 0:
+        subject = f"Bretton Woods Decay: {critical_count} CRITICAL - {datetime.now().strftime('%B %Y')}"
+    elif warning_count > 0:
+        subject = f"Bretton Woods Decay: {warning_count} Warning - {datetime.now().strftime('%B %Y')}"
     elif statuses:
-        subject = f"Bretton Woods Decay: Stable - {datetime.now().strftime('%B %Y')}"
+        subject = f"Bretton Woods Decay: All Stable - {datetime.now().strftime('%B %Y')}"
     else:
         subject = f"Bretton Woods Decay: Data Unavailable - {datetime.now().strftime('%B %Y')}"
     
