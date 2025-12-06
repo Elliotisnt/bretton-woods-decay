@@ -99,7 +99,7 @@ THRESHOLDS = {
         "direction": "above",
         "unit": "%",
         "description": "Interest payments vs defense spending (Guns vs Debt)",
-        "context": "Crossed 100% for the first time in 2024 (~$880B interest vs ~$820B defense). Niall Ferguson's research shows great powers historically decline when debt service exceeds military spending—true of Hapsburg Spain, ancien régime France, the Ottoman Empire, and the British Empire."
+        "context": "Crossed 100% for the first time in 2024 (~$880B interest vs ~$820B defense). Great powers historically decline when debt service exceeds military spending, true of Hapsburg Spain, ancien régime France, the Ottoman Empire, and the British Empire."
     },
     "trade_balance_gdp": {
         "warning": -1.5,
@@ -107,7 +107,7 @@ THRESHOLDS = {
         "direction": "above",
         "unit": "%",
         "description": "Trade balance as % of GDP",
-        "context": "The US has run continuous deficits since 1976, currently ~-3% of GDP. Peak deficit was -5.7% in 2006. A rapid move toward zero (less negative) would signal the world is no longer willing to finance US consumption—a forced adjustment rather than improving competitiveness. The deficit itself isn't the concern; sudden narrowing is."
+        "context": "The US has run continuous deficits since 1976. Peak deficit was -5.7% in 2006. A rapid move toward zero (less negative) would signal the world is no longer willing to finance US consumption."
     }
 }
 
@@ -1101,9 +1101,6 @@ def generate_html_report(data):
         </div>
         <div class="indicator-value">{value_display}</div>
         <div class="indicator-details">
-            <table>
-                <tr><td>As of</td><td>{date_display}</td></tr>
-            </table>
             {error_note}
         </div>
         <div class="data-freshness">Data as of: {freshness} | Source: {source}</div>
