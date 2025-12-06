@@ -1,10 +1,12 @@
 name: Bretton Woods Decay Report
 
 on:
-  # Run semi-annually: January 15 and July 15 at 9 AM Eastern (2 PM UTC)
+  # Run quarterly: 1st of January, April, July, October at 9 AM Eastern (2 PM UTC)
   schedule:
-    - cron: '0 14 15 1 *'   # January 15
-    - cron: '0 14 15 7 *'   # July 15
+    - cron: '0 14 1 1 *'   # January 1
+    - cron: '0 14 1 4 *'   # April 1
+    - cron: '0 14 1 7 *'   # July 1
+    - cron: '0 14 1 10 *'  # October 1
   
   # Allow manual trigger
   workflow_dispatch:
