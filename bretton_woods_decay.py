@@ -19,7 +19,7 @@ Plus informational context:
 Designed to run quarterly (Jan, Apr, Jul, Oct) via GitHub Actions.
 Sends a formatted email report via iCloud SMTP.
 
-Developed with assistance from Claude Opus 4.5
+Developed with assistance from Claude Code
 """
 
 import os
